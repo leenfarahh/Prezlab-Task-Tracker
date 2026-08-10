@@ -1,0 +1,11 @@
+{% macro health_strip(segments) -%}
+{% if segments %}
+<div class="health-strip">
+  {% for seg in segments %}
+  <span style="width: {{ seg.pct }}%; background-color: {{ seg.color }};" title="{{ seg.count }} {{ seg.status }}"></span>
+  {% endfor %}
+</div>
+{% else %}
+<div class="health-strip"></div>
+{% endif %}
+{%- endmacro %}

@@ -1,0 +1,31 @@
+{% import "partials/task_card.html" as tc %}
+<section class="board-section" id="board-container"
+         {% if oob %}hx-swap-oob="true"{% endif %}
+         hx-get="/partials/board?workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
+  <div class="board-header">
+    <h1>{{ board_title }}</h1>
+    {% if active_workstream != "all" %}
+    <button class="btn-primary"
+            hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}"
+            hx-target="#modal-root" hx-swap="innerHTML">
+      + New task
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="board-grid">
+    {% for status in status_order %}
+    <div>
+      <p class="column-header">
+        <span>{{ status_label[status] }}</span>
+        <span>{{ grouped[status] | length }}</span>
+      </p>
+      {% for task in grouped[status] %}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], task.overdue, active_workstream, task.id in flagged_ids) }}
+      {% else %}
+        <p class="empty-column">Nothing here.</p>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

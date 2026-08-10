@@ -1,0 +1,33 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new', 'click')">
+  <form class="modal-card" hx-post="/tasks" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px;">New task</p>
+    <input type="hidden" name="workstream_id" value="{{ workstream_id }}" />
+
+    <input name="title" required placeholder="What needs to happen?" autofocus />
+
+    <div class="modal-row">
+      <div>
+        <select name="priority">
+          <option value="low">Low priority</option>
+          <option value="medium" selected>Medium priority</option>
+          <option value="high">High priority</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div>
+        <select name="assignee_id">
+          {% for p in profiles %}
+          <option value="{{ p.id }}" {{ 'selected' if p.id == current_user_id else '' }}>{{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <input type="date" name="due_date" />
+
+    <div class="modal-actions">
+      <button type="button" id="modal-close-new" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+      <button type="submit" class="btn-primary">Add task</button>
+    </div>
+  </form>
+</div>

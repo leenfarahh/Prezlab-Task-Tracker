@@ -1,0 +1,34 @@
+{% import "partials/health_strip.html" as hs %}
+<aside class="sidebar" id="sidebar-container"
+       {% if oob %}hx-swap-oob="true"{% endif %}
+       hx-get="/partials/sidebar?workstream={{ active_workstream }}" hx-trigger="every 6s" hx-swap="innerHTML">
+  <p class="eyebrow" style="margin-bottom: 16px;">Prezlab AI Team</p>
+
+  <a href="/?workstream=all" hx-boost="true"
+     class="sidebar-item {{ 'active' if active_workstream == 'all' else '' }}">
+    All workstreams
+  </a>
+
+  <div style="margin-top: 8px;">
+    {% for ws in workstreams %}
+    <div style="display: flex; align-items: center; gap: 2px; margin-bottom: 4px;">
+      <a href="/?workstream={{ ws.id }}" hx-boost="true"
+         class="sidebar-item {{ 'active' if active_workstream == ws.id else '' }}" style="flex: 1; margin-bottom: 0;">
+        <span>{{ ws.name }}</span>
+        {{ hs.health_strip(ws.segments) }}
+      </a>
+      <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 12px; flex-shrink: 0;"
+              hx-get="/partials/edit-workstream-modal?workstream_id={{ ws.id }}&active_workstream={{ active_workstream }}"
+              hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">
+        Edit
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+
+  <button class="btn-ghost" style="width: 100%; margin-top: 12px;"
+          hx-get="/partials/new-workstream-modal?active_workstream={{ active_workstream }}"
+          hx-target="#modal-root" hx-swap="innerHTML">
+    + New workstream
+  </button>
+</aside>

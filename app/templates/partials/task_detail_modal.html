@@ -1,0 +1,44 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-detail', 'click')">
+  <form class="modal-card" hx-post="/tasks/{{ task.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+    <input name="title" required value="{{ task.title }}" autofocus />
+
+    <label>Status</label>
+    <select name="status">
+      {% for status in status_order %}
+      <option value="{{ status }}" {{ 'selected' if status == task.status else '' }}>{{ status_label[status] }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Owner</label>
+    <select name="assignee_id">
+      <option value="">Unassigned</option>
+      {% for p in profiles %}
+      <option value="{{ p.id }}" {{ 'selected' if p.id == task.assignee_id else '' }}>{{ p.full_name }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="modal-row">
+      <select name="priority">
+        <option value="low" {{ 'selected' if task.priority == 'low' else '' }}>Low priority</option>
+        <option value="medium" {{ 'selected' if task.priority == 'medium' else '' }}>Medium priority</option>
+        <option value="high" {{ 'selected' if task.priority == 'high' else '' }}>High priority</option>
+        <option value="urgent" {{ 'selected' if task.priority == 'urgent' else '' }}>Urgent</option>
+      </select>
+      <input type="date" name="due_date" value="{{ task.due_date or '' }}" />
+    </div>
+
+    <div class="modal-actions" style="justify-content: space-between;">
+      <button type="button" class="link-muted" style="color: var(--blocked);"
+              hx-post="/tasks/{{ task.id }}/delete" hx-vals='{"active_workstream": "{{ active_workstream }}"}'
+              hx-target="#modal-root" hx-swap="innerHTML"
+              hx-confirm="Delete this task? This can't be undone.">
+        Delete
+      </button>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="modal-close-detail" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+        <button type="submit" class="btn-primary">Save changes</button>
+      </div>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,28 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-edit-workstream', 'click')">
+  <form class="modal-card" hx-post="/workstreams/{{ workstream.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px;">Edit workstream</p>
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+
+    <input name="name" required placeholder="Workstream name" value="{{ workstream.name }}" autofocus />
+    <input name="client_label" placeholder="Project name (optional)" value="{{ workstream.client_label or '' }}" />
+
+    <select name="color">
+      {% for hex, label in colors %}
+      <option value="{{ hex }}" {{ 'selected' if hex == workstream.color else '' }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="modal-actions" style="justify-content: space-between;">
+      <button type="button" class="link-muted" style="color: var(--blocked);"
+              hx-post="/workstreams/{{ workstream.id }}/archive" hx-vals='{"active_workstream": "{{ active_workstream }}"}'
+              hx-target="#modal-root" hx-swap="innerHTML"
+              hx-confirm="Archive this workstream? It'll be hidden from the sidebar and board, but its tasks aren't deleted.">
+        Archive
+      </button>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="modal-close-edit-workstream" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+        <button type="submit" class="btn-primary">Save changes</button>
+      </div>
+    </div>
+  </form>
+</div>

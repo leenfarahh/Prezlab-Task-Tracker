@@ -1,0 +1,92 @@
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+from app.auth import current_user, require_login
+from app.data import build_board_context, build_sidebar_context, fetch_profiles
+from app.supabase_client import get_service_client
+from app.view_helpers import PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
+
+router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/", response_class=HTMLResponse)
+def dashboard(request: Request, workstream: str = "all"):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    ctx = {
+        "request": request,
+        "status_order": STATUS_ORDER,
+        "status_label": STATUS_LABEL,
+        "status_color": STATUS_COLOR,
+        "priority_label": PRIORITY_LABEL,
+        **build_sidebar_context(workstream),
+        **build_board_context(workstream),
+    }
+    ctx["error"] = None
+    return templates.TemplateResponse("dashboard.html", ctx)
+
+
+@router.get("/partials/board", response_class=HTMLResponse)
+def board_partial(request: Request, workstream: str = "all"):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {
+        "request": request,
+        "status_order": STATUS_ORDER,
+        "status_label": STATUS_LABEL,
+        "status_color": STATUS_COLOR,
+        "priority_label": PRIORITY_LABEL,
+        **build_board_context(workstream),
+    }
+    return templates.TemplateResponse("partials/board.html", ctx)
+
+
+@router.get("/partials/sidebar", response_class=HTMLResponse)
+def sidebar_partial(request: Request, workstream: str = "all"):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {"request": request, **build_sidebar_context(workstream)}
+    return templates.TemplateResponse("partials/sidebar.html", ctx)
+
+
+@router.get("/partials/empty", response_class=HTMLResponse)
+def empty_partial():
+    return HTMLResponse("")
+
+
+@router.get("/partials/new-task-modal", response_class=HTMLResponse)
+def new_task_modal(request: Request, workstream_id: str):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    user = current_user(request)
+    ctx = {
+        "request": request,
+        "workstream_id": workstream_id,
+        "profiles": list(fetch_profiles().values()),
+        "current_user_id": user["id"],
+    }
+    return templates.TemplateResponse("partials/new_task_modal.html", ctx)
+
+
+@router.get("/partials/task-detail-modal", response_class=HTMLResponse)
+def task_detail_modal(request: Request, task_id: str, workstream: str = "all"):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    task = get_service_client().table("tasks").select("*").eq("id", task_id).single().execute().data
+    ctx = {
+        "request": request,
+        "task": task,
+        "active_workstream": workstream,
+        "status_order": STATUS_ORDER,
+        "status_label": STATUS_LABEL,
+        "profiles": list(fetch_profiles().values()),
+    }
+    return templates.TemplateResponse("partials/task_detail_modal.html", ctx)
