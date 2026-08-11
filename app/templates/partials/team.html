@@ -1,0 +1,9 @@
+<section class="board-section" id="board-container">
+  <div class="board-header">
+    <h1>Team</h1>
+  </div>
+
+  <div id="team-body" hx-get="/partials/team" hx-trigger="every 10s" hx-swap="morph:innerHTML">
+    {% include "partials/team_list.html" %}
+  </div>
+</section>

@@ -1,10 +1,9 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new-workstream', 'click')">
   <form class="modal-card" hx-post="/workstreams" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">New workstream</p>
-    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+    <input type="hidden" name="project_id" value="{{ project_id }}" />
 
     <input name="name" required placeholder="Workstream name" autofocus />
-    <input name="client_label" placeholder="Project name (optional)" />
 
     <div class="modal-actions">
       <button type="button" id="modal-close-new-workstream" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>

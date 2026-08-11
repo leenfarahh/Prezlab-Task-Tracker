@@ -1,0 +1,68 @@
+<div class="team-list">
+  {% for person in people %}
+  <details class="team-details" data-key="team:{{ person.id }}">
+    <summary class="team-summary">
+      <span class="disclosure-arrow"></span>
+      {% if person.avatar_url %}
+      <img src="{{ person.avatar_url }}" alt="{{ person.full_name }}" class="team-avatar-img" />
+      {% else %}
+      <span class="avatar team-avatar" style="background-color: {{ person.avatar_color }};">{{ person.initials }}</span>
+      {% endif %}
+      <div class="team-card-info">
+        <p class="team-card-name">{{ person.full_name }}</p>
+        <p class="team-card-role">{{ person.role or "—" }}</p>
+      </div>
+      <p class="team-card-stats">
+        {{ person.done_count }} / {{ person.total_tasks }} done
+        {% if person.overdue_count %}<span class="overdue"> · {{ person.overdue_count }} overdue</span>{% endif %}
+      </p>
+    </summary>
+
+    <div class="team-expanded">
+      <div class="date-summary">
+        <div class="date-block date-block-overdue">
+          <span class="date-block-count">{{ person.date_summary.overdue }}</span>
+          <span class="date-block-label">Overdue</span>
+        </div>
+        <div class="date-block date-block-week">
+          <span class="date-block-count">{{ person.date_summary.due_this_week }}</span>
+          <span class="date-block-label">Due this week</span>
+        </div>
+        <div class="date-block date-block-upcoming">
+          <span class="date-block-count">{{ person.date_summary.upcoming }}</span>
+          <span class="date-block-label">Upcoming</span>
+        </div>
+      </div>
+
+      <div class="board-grid">
+        {% for status in status_order %}
+        <div class="board-column">
+          <p class="column-header">
+            <span>{{ status_label[status] }}</span>
+            <span class="column-count">{{ person.grouped[status] | length }}</span>
+          </p>
+          {% for task in person.grouped[status] %}
+          <a href="/?project={{ task.project_id }}&workstream={{ task.workstream_id }}" class="task-card">
+            <p class="workstream-tag">{{ task.project_name }} · {{ task.workstream_name }}</p>
+            <div class="task-card-top">
+              <p class="task-card-title">{{ task.title }}</p>
+              <span class="status-dot" style="background-color: {{ status_color[task.status] }};"></span>
+            </div>
+            {% if task.due_date_display %}
+            <div class="task-card-meta">
+              <span class="{{ 'overdue' if task.overdue else '' }}">{{ 'Overdue ' if task.overdue else 'Due ' }}{{ task.due_date_display }}</span>
+            </div>
+            {% endif %}
+          </a>
+          {% else %}
+          <p class="empty-column">Nothing here.</p>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </details>
+  {% else %}
+  <p class="empty-column">No team members yet.</p>
+  {% endfor %}
+</div>

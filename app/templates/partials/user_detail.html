@@ -1,0 +1,92 @@
+<section class="board-section" id="board-container">
+  <div class="board-header">
+    <h1>{{ person.full_name }}</h1>
+  </div>
+
+  <div class="user-profile">
+    <div class="user-profile-avatar">
+      {% if person.avatar_url %}
+      <img src="{{ person.avatar_url }}" alt="{{ person.full_name }}" class="user-avatar-img" />
+      {% else %}
+      <span class="avatar user-avatar" style="background-color: {{ person.avatar_color }};">{{ person.initials }}</span>
+      {% endif %}
+      {% if is_self %}
+      <form hx-post="/users/{{ person.id }}/avatar" hx-target="#board-container" hx-swap="outerHTML"
+            hx-encoding="multipart/form-data" style="margin-top: 8px;">
+        <label class="btn-ghost avatar-upload-label">
+          Change photo
+          <input type="file" name="file" accept="image/*" onchange="this.form.requestSubmit()" style="display: none;" />
+        </label>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="user-profile-info">
+      {% if is_self %}
+      <form hx-post="/users/{{ person.id }}" hx-target="#board-container" hx-swap="outerHTML">
+        <label>Name</label>
+        <input name="full_name" required value="{{ person.full_name }}" />
+        <label>Role</label>
+        <input name="role" placeholder="e.g. Designer" value="{{ person.role or '' }}" />
+        <button type="submit" class="btn-primary">Save</button>
+      </form>
+      {% else %}
+      <p class="ws-overview-value">{{ person.role or "No role set" }}</p>
+      <p class="task-card-meta" style="margin-top: 4px;">{{ person.email }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="date-summary">
+    <div class="date-block date-block-overdue">
+      <span class="date-block-count">{{ date_summary.overdue }}</span>
+      <span class="date-block-label">Overdue</span>
+    </div>
+    <div class="date-block date-block-week">
+      <span class="date-block-count">{{ date_summary.due_this_week }}</span>
+      <span class="date-block-label">Due this week</span>
+    </div>
+    <div class="date-block date-block-upcoming">
+      <span class="date-block-count">{{ date_summary.upcoming }}</span>
+      <span class="date-block-label">Upcoming</span>
+    </div>
+  </div>
+
+  <div class="ws-overview">
+    <div class="ws-overview-item">
+      <span class="ws-overview-label">Tasks</span>
+      <span class="ws-overview-value">{{ done_count }} / {{ total_tasks }} done</span>
+    </div>
+    <div class="ws-overview-strip">
+      {% import "partials/health_strip.html" as hs %}
+      {{ hs.health_strip(segments) }}
+    </div>
+  </div>
+
+  <div class="board-grid">
+    {% for status in status_order %}
+    <div class="board-column">
+      <p class="column-header">
+        <span>{{ status_label[status] }}</span>
+        <span class="column-count">{{ grouped[status] | length }}</span>
+      </p>
+      {% for task in grouped[status] %}
+      <a href="/?project={{ task.project_id }}&workstream={{ task.workstream_id }}" class="task-card">
+        <p class="workstream-tag">{{ task.project_name }} · {{ task.workstream_name }}</p>
+        <div class="task-card-top">
+          <p class="task-card-title">{{ task.title }}</p>
+          <span class="status-dot" style="background-color: {{ status_color[task.status] }};"></span>
+        </div>
+        {% if task.due_date_display %}
+        <div class="task-card-meta">
+          <span class="{{ 'overdue' if task.overdue else '' }}">{{ 'Overdue ' if task.overdue else 'Due ' }}{{ task.due_date_display }}</span>
+        </div>
+        {% endif %}
+      </a>
+      {% else %}
+      <p class="empty-column">Nothing here.</p>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

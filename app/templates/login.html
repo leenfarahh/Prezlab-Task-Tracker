@@ -1,18 +1,27 @@
 {% extends "base.html" %}
 {% block body %}
-<main class="login-page">
-  <div class="login-card">
-    <img src="/static/logo.png" alt="Prezlab" class="login-logo" />
-    <p class="eyebrow">Prezlab AI Team</p>
-    <p style="font-size: 14px; color: var(--muted); margin: 8px 0 24px;">
-      Enter your work email to see what's in flight.
-    </p>
+<div class="login-shell">
+  <header class="login-banner">
+    <img src="/static/logo.png" alt="Prezlab" class="login-banner-logo" />
+  </header>
 
-    <form method="post" action="/login">
-      <input type="email" name="email" required placeholder="you@prezlab.com" autofocus />
-      <button type="submit" class="btn-primary" style="width: 100%;">Continue</button>
-      {% if error %}<p style="color: var(--blocked); font-size: 14px; margin-top: 8px;">{{ error }}</p>{% endif %}
-    </form>
-  </div>
-</main>
+  <main class="login-center">
+    <div class="login-card">
+      <p class="eyebrow">Prezlab AI Team</p>
+      <p style="font-size: 14px; color: var(--muted); margin: 8px 0 24px;">
+        Enter your work email to see what's in flight.
+      </p>
+
+      <form method="post" action="/login">
+        <input type="email" name="email" required placeholder="you@prezlab.com" autofocus />
+        <button type="submit" class="btn-primary" style="width: 100%;">Continue</button>
+        {% if error %}<p style="color: var(--blocked); font-size: 14px; margin-top: 8px;">{{ error }}</p>{% endif %}
+      </form>
+    </div>
+  </main>
+
+  <footer class="login-footer">
+    <p>Prezlab &middot; Strategic communications &amp; presentation design</p>
+  </footer>
+</div>
 {% endblock %}

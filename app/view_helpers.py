@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 STATUS_ORDER = ["backlog", "in_progress", "at_risk", "blocked", "in_review", "done"]
 
@@ -72,8 +72,50 @@ def initials(full_name: str) -> str:
     return (parts[0][0] + parts[-1][0]).upper()
 
 
+def date_buckets(tasks: list[dict]) -> dict:
+    """Counts of tasks with a due date, bucketed as overdue / due this week / upcoming."""
+    today = date.today()
+    week_end = today + timedelta(days=6)
+    buckets = {"overdue": 0, "due_this_week": 0, "upcoming": 0}
+    for t in tasks:
+        if not t.get("due_date"):
+            continue
+        d = date.fromisoformat(t["due_date"])
+        if d < today:
+            buckets["overdue"] += 1
+        elif d <= week_end:
+            buckets["due_this_week"] += 1
+        else:
+            buckets["upcoming"] += 1
+    return buckets
+
+
 def group_by_status(tasks: list[dict]) -> dict[str, list[dict]]:
     grouped = {status: [] for status in STATUS_ORDER}
     for t in tasks:
         grouped.setdefault(t["status"], []).append(t)
     return grouped
+
+
+def group_by_assignee(tasks: list[dict], profiles: dict[str, dict]) -> list[dict]:
+    """Tasks bucketed by assignee for the "by user" view - one column per person
+    who has at least one task here, sorted by name, with unassigned tasks last.
+    """
+    by_user: dict[str, list[dict]] = {}
+    unassigned = []
+    for t in tasks:
+        assignee_id = t.get("assignee_id")
+        if not assignee_id:
+            unassigned.append(t)
+            continue
+        by_user.setdefault(assignee_id, []).append(t)
+
+    columns = [
+        {"assignee": profiles[uid], "tasks": ts}
+        for uid, ts in by_user.items()
+        if uid in profiles
+    ]
+    columns.sort(key=lambda c: c["assignee"]["full_name"])
+    if unassigned:
+        columns.append({"assignee": None, "tasks": unassigned})
+    return columns

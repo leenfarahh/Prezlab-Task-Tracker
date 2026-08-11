@@ -1,45 +1,85 @@
 {% import "partials/health_strip.html" as hs %}
-<aside class="sidebar" id="sidebar-container"
-       {% if oob %}hx-swap-oob="true"{% endif %}
-       hx-get="/partials/sidebar?workstream={{ active_workstream }}" hx-trigger="every 6s" hx-swap="innerHTML">
-  <div class="sidebar-head">
-    <img src="/static/logo.png" alt="Prezlab" class="logo-mark" />
-    <button type="button" class="icon-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#10094;</button>
-  </div>
+{% if oob %}<div hx-swap-oob="innerHTML:#sidebar-body">{% endif %}
   <p class="eyebrow" style="margin-bottom: 16px;">AI Team</p>
 
-  <a href="/?workstream=all" hx-boost="true"
-     class="sidebar-item {{ 'active' if active_workstream == 'all' else '' }}">
-    All workstreams
+  <a href="/team"     class="sidebar-item {{ 'active' if active_project == 'team' else '' }}">
+    Team
+  </a>
+  <a href="/?project=all"     class="sidebar-item {{ 'active' if active_project == 'all' else '' }}">
+    All projects
   </a>
 
   <div style="margin-top: 8px;">
-    {% for ws in workstreams %}
-    <div class="sidebar-row {{ 'active' if active_workstream == ws.id else '' }}">
-      <a href="/?workstream={{ ws.id }}" hx-boost="true" class="sidebar-item" style="flex: 1;">
-        <span>{{ ws.name }}</span>
-        {{ hs.health_strip(ws.segments) }}
-      </a>
-      <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 12px; flex-shrink: 0;"
-              hx-get="/partials/edit-workstream-modal?workstream_id={{ ws.id }}&active_workstream={{ active_workstream }}"
-              hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">
-        Edit
-      </button>
-    </div>
+    {% for p in projects %}
+    <details class="sidebar-details" id="project-{{ p.id }}" data-key="project:{{ p.id }}">
+      <summary class="sidebar-row {{ 'active' if active_project == p.id and active_workstream == 'all' else '' }}">
+        <span class="disclosure-arrow"></span>
+        <a href="/?project={{ p.id }}" class="sidebar-item" style="flex: 1;" onclick="event.stopPropagation()">
+          <span>{{ p.name }}</span>
+          {{ hs.health_strip(p.segments) }}
+        </a>
+        <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 12px; flex-shrink: 0;"
+                onclick="event.stopPropagation()"
+                hx-get="/partials/edit-project-modal?project_id={{ p.id }}&active_project={{ active_project }}"
+                hx-target="#modal-root" hx-swap="innerHTML" title="Edit project">
+          Edit
+        </button>
+      </summary>
+
+      {% if p.workstreams %}
+      <div class="sidebar-workstreams">
+        {% for ws in p.workstreams %}
+        <details class="sidebar-details" id="workstream-{{ ws.id }}" data-key="workstream:{{ ws.id }}">
+          <summary class="sidebar-row {{ 'active' if active_project == p.id and active_workstream == ws.id else '' }}">
+            <span class="disclosure-arrow"></span>
+            <a href="/?project={{ p.id }}&workstream={{ ws.id }}" class="sidebar-item sidebar-item-sub" style="flex: 1;" onclick="event.stopPropagation()">
+              {{ ws.name }}
+            </a>
+            <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 11px; flex-shrink: 0;"
+                    onclick="event.stopPropagation()"
+                    hx-get="/partials/edit-workstream-modal?workstream_id={{ ws.id }}&active_project={{ p.id }}&active_workstream={{ ws.id }}"
+                    hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">
+              Edit
+            </button>
+          </summary>
+
+          {% if ws.tasks %}
+          <div class="sidebar-tasks">
+            {% for t in ws.tasks %}
+            <button type="button" class="sidebar-task"
+                    hx-get="/partials/task-detail-modal?task_id={{ t.id }}&project={{ p.id }}&workstream={{ ws.id }}"
+                    hx-target="#modal-root" hx-swap="innerHTML">
+              <span class="status-dot" style="background-color: {{ t.dot_color }};"></span>
+              <span class="sidebar-task-title">{{ t.title }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </details>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </details>
     {% endfor %}
   </div>
 
-  <a href="/archived" hx-boost="true"
-     class="sidebar-item {{ 'active' if active_workstream == 'archived' else '' }}"
+  <a href="/archived"     class="sidebar-item {{ 'active' if active_project == 'archived' else '' }}"
      style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
     Archived tasks
   </a>
-  <a href="/archived-workstreams" hx-boost="true"
-     class="sidebar-item {{ 'active' if active_workstream == 'archived_workstreams' else '' }}">
+  <a href="/archived-workstreams"     class="sidebar-item {{ 'active' if active_project == 'archived_workstreams' else '' }}">
     Archived workstreams
   </a>
+  <a href="/archived-projects"     class="sidebar-item {{ 'active' if active_project == 'archived_projects' else '' }}">
+    Archived projects
+  </a>
 
-  <form method="post" action="/logout" style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
+  <a href="/users/{{ request.session.user.id }}"     class="sidebar-item"
+     style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
+    My profile
+  </a>
+
+  <form method="post" action="/logout">
     <button type="submit" class="sidebar-item" style="width: 100%;">Log out</button>
   </form>
-</aside>
+{% if oob %}</div>{% endif %}

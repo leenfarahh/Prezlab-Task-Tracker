@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import SESSION_SECRET
-from app.routers import auth_router, board_router, tasks_router, workstream_router
+from app.routers import auth_router, board_router, project_router, tasks_router, user_router, workstream_router
 
 app = FastAPI(title="Prezlab AI Team Tracker")
 templates = Jinja2Templates(directory="app/templates")
@@ -18,7 +18,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 app.include_router(auth_router.router)
 app.include_router(board_router.router)
+app.include_router(project_router.router)
 app.include_router(tasks_router.router)
+app.include_router(user_router.router)
 app.include_router(workstream_router.router)
 
 

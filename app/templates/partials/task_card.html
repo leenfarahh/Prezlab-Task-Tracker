@@ -1,7 +1,7 @@
-{% macro task_card(task, assignee, status_color, priority_label, priority_color, active_workstream, flagged=False) -%}
+{% macro task_card(task, assignee, status_color, priority_label, priority_color, active_project, active_workstream, flagged=False) -%}
 <button class="task-card {{ 'flagged' if flagged else '' }}"
-        hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
-  {% if active_workstream in ("all", "archived") and task.workstream_name %}
+        hx-get="/partials/task-detail-modal?task_id={{ task.id }}&project={{ active_project }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
+  {% if active_workstream in ("all", "archived", "by_user") and task.workstream_name %}
   <p class="workstream-tag">{{ task.workstream_name }}</p>
   {% endif %}
   <div class="task-card-top">
@@ -14,7 +14,11 @@
       <span class="{{ 'overdue' if task.overdue else '' }}">{{ 'Overdue ' if task.overdue else 'Due ' }}{{ task.due_date_display }}</span>
     {% endif %}
     {% if assignee %}
+      {% if assignee.avatar_url %}
+      <img src="{{ assignee.avatar_url }}" alt="{{ assignee.full_name }}" title="{{ assignee.full_name }}" class="avatar-img" />
+      {% else %}
       <span class="avatar" style="background-color: {{ assignee.avatar_color }};" title="{{ assignee.full_name }}">{{ assignee.initials }}</span>
+      {% endif %}
     {% endif %}
   </div>
 </button>

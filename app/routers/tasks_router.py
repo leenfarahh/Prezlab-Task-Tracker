@@ -36,7 +36,7 @@ def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
     )
 
 
-def _refreshed_fragments(request: Request, active_workstream: str) -> str:
+def _refreshed_fragments(request: Request, active_project: str, active_workstream: str) -> str:
     """Renders board + sidebar as out-of-band swaps, closing the modal in the process."""
     board_ctx = {
         "request": request,
@@ -46,9 +46,9 @@ def _refreshed_fragments(request: Request, active_workstream: str) -> str:
         "priority_label": PRIORITY_LABEL,
         "priority_color": PRIORITY_COLOR,
         "oob": True,
-        **build_board_context(active_workstream),
+        **build_board_context(active_project, active_workstream),
     }
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
 
     board_html = templates.get_template("partials/board.html").render(board_ctx)
     sidebar_html = templates.get_template("partials/sidebar.html").render(sidebar_ctx)
@@ -59,6 +59,7 @@ def _refreshed_fragments(request: Request, active_workstream: str) -> str:
 def create_task(
     request: Request,
     workstream_id: str = Form(...),
+    active_project: str = Form("all"),
     title: str = Form(...),
     priority: str = Form("medium"),
     assignee_id: str = Form(""),
@@ -80,7 +81,7 @@ def create_task(
         }
     ).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, workstream_id))
+    return HTMLResponse(_refreshed_fragments(request, active_project, workstream_id))
 
 
 @router.post("/tasks/{task_id}", response_class=HTMLResponse)
@@ -92,6 +93,7 @@ def update_task(
     priority: str = Form(...),
     assignee_id: str = Form(""),
     due_date: str = Form(""),
+    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
     redirect = require_login(request)
@@ -111,11 +113,16 @@ def update_task(
         }
     ).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
 
 
 @router.post("/tasks/{task_id}/archive", response_class=HTMLResponse)
-def archive_task(request: Request, task_id: str, active_workstream: str = Form("all")):
+def archive_task(
+    request: Request,
+    task_id: str,
+    active_project: str = Form("all"),
+    active_workstream: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -125,11 +132,16 @@ def archive_task(request: Request, task_id: str, active_workstream: str = Form("
 
     get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
 
 
 @router.post("/tasks/{task_id}/unarchive", response_class=HTMLResponse)
-def unarchive_task(request: Request, task_id: str, active_workstream: str = Form("all")):
+def unarchive_task(
+    request: Request,
+    task_id: str,
+    active_project: str = Form("all"),
+    active_workstream: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -139,11 +151,16 @@ def unarchive_task(request: Request, task_id: str, active_workstream: str = Form
 
     get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
 
 
 @router.post("/tasks/{task_id}/delete", response_class=HTMLResponse)
-def delete_task(request: Request, task_id: str, active_workstream: str = Form("all")):
+def delete_task(
+    request: Request,
+    task_id: str,
+    active_project: str = Form("all"),
+    active_workstream: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -153,4 +170,4 @@ def delete_task(request: Request, task_id: str, active_workstream: str = Form("a
 
     get_service_client().table("tasks").delete().eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))

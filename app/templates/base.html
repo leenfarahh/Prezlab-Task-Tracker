@@ -4,11 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Team Task Tracker</title>
+  <link rel="icon" href="/static/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
-  <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
   <script>
     if (localStorage.getItem('sidebarCollapsed') === '1') {
       document.documentElement.classList.add('sidebar-collapsed');
@@ -17,9 +19,52 @@
       document.documentElement.classList.toggle('sidebar-collapsed');
       localStorage.setItem('sidebarCollapsed', document.documentElement.classList.contains('sidebar-collapsed') ? '1' : '0');
     }
+
+    // Idiomorph's default attribute sync removes any attribute the incoming
+    // HTML doesn't have - including "open" on <details>, since the server
+    // never renders that attribute. Left alone, every 6s poll (and every oob
+    // sidebar refresh after a create/edit/archive) would silently collapse
+    // whatever the user had expanded, and removing the attribute even fires
+    // a "toggle" event that would overwrite the localStorage state below
+    // with "closed". Tell Idiomorph to leave "open" untouched and let user
+    // clicks (and the localStorage restore below) be the only thing that
+    // changes it.
+    //
+    // NB: this script tag deliberately has no "defer" - defer is a no-op on
+    // inline scripts (it only affects scripts with a src attribute), so this
+    // runs immediately during parsing, before the deferred htmx/idiomorph
+    // scripts below it have executed. window.Idiomorph isn't defined yet at
+    // that point, so the registration has to wait for DOMContentLoaded,
+    // which deferred scripts are guaranteed to finish before.
+    document.addEventListener('DOMContentLoaded', function () {
+      Idiomorph.defaults.callbacks.beforeAttributeUpdated = function (attr, element) {
+        return !(attr === 'open' && element.tagName === 'DETAILS');
+      };
+    });
+
+    // The sidebar tree (projects/workstreams) re-renders wholesale every 6s
+    // (polling) and after any create/edit/archive action (oob swap), which
+    // would otherwise reset manually expanded/collapsed <details> back to
+    // their server-rendered default. Persist and reapply open state here so
+    // it's purely user-controlled, independent of what's currently active.
+    function syncSidebarDisclosures() {
+      document.querySelectorAll('#sidebar-container details[data-key]').forEach(function (el) {
+        var key = 'sidebarOpen:' + el.dataset.key;
+        var stored = localStorage.getItem(key);
+        if (stored === '1') el.open = true;
+        else if (stored === '0') el.open = false;
+        if (!el.dataset.boundToggle) {
+          el.dataset.boundToggle = '1';
+          el.addEventListener('toggle', function () {
+            localStorage.setItem(key, el.open ? '1' : '0');
+          });
+        }
+      });
+    }
+    document.addEventListener('htmx:load', syncSidebarDisclosures);
   </script>
 </head>
-<body>
+<body hx-ext="morph">
   {% block body %}{% endblock %}
 </body>
 </html>

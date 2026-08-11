@@ -2,7 +2,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth import current_user, require_login
+from app.auth import require_login
 from app.data import build_archived_workstreams_context, build_sidebar_context
 from app.supabase_client import get_service_client
 
@@ -30,44 +30,39 @@ def archived_workstreams_partial(request: Request):
 
 
 @router.get("/partials/new-workstream-modal", response_class=HTMLResponse)
-def new_workstream_modal(request: Request, active_workstream: str = "all"):
+def new_workstream_modal(request: Request, project_id: str):
     redirect = require_login(request)
     if redirect:
         return redirect
     return templates.TemplateResponse(
         "partials/new_workstream_modal.html",
-        {"request": request, "active_workstream": active_workstream},
+        {"request": request, "project_id": project_id},
     )
 
 
 @router.post("/workstreams", response_class=HTMLResponse)
-def create_workstream(
-    request: Request,
-    name: str = Form(...),
-    client_label: str = Form(""),
-    active_workstream: str = Form("all"),
-):
+def create_workstream(request: Request, name: str = Form(...), project_id: str = Form(...)):
     redirect = require_login(request)
     if redirect:
         return redirect
-    user = current_user(request)
 
     get_service_client().table("workstreams").insert(
-        {
-            "name": name.strip(),
-            "client_label": client_label.strip() or None,
-            "owner_id": user["id"],
-        }
+        {"name": name.strip(), "project_id": project_id}
     ).execute()
 
     # oob-only response: closes the modal (empties #modal-root) and refreshes
     # the sidebar in place - same pattern as tasks_router._refreshed_fragments.
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(project_id)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
 @router.get("/partials/edit-workstream-modal", response_class=HTMLResponse)
-def edit_workstream_modal(request: Request, workstream_id: str, active_workstream: str = "all"):
+def edit_workstream_modal(
+    request: Request,
+    workstream_id: str,
+    active_project: str = "all",
+    active_workstream: str = "all",
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -76,7 +71,12 @@ def edit_workstream_modal(request: Request, workstream_id: str, active_workstrea
     )
     return templates.TemplateResponse(
         "partials/edit_workstream_modal.html",
-        {"request": request, "workstream": workstream, "active_workstream": active_workstream},
+        {
+            "request": request,
+            "workstream": workstream,
+            "active_project": active_project,
+            "active_workstream": active_workstream,
+        },
     )
 
 
@@ -85,26 +85,26 @@ def update_workstream(
     request: Request,
     workstream_id: str,
     name: str = Form(...),
-    client_label: str = Form(""),
+    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
     redirect = require_login(request)
     if redirect:
         return redirect
 
-    get_service_client().table("workstreams").update(
-        {
-            "name": name.strip(),
-            "client_label": client_label.strip() or None,
-        }
-    ).eq("id", workstream_id).execute()
+    get_service_client().table("workstreams").update({"name": name.strip()}).eq("id", workstream_id).execute()
 
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
 @router.post("/workstreams/{workstream_id}/archive", response_class=HTMLResponse)
-def archive_workstream(request: Request, workstream_id: str, active_workstream: str = Form("all")):
+def archive_workstream(
+    request: Request,
+    workstream_id: str,
+    active_project: str = Form("all"),
+    active_workstream: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -115,11 +115,11 @@ def archive_workstream(request: Request, workstream_id: str, active_workstream: 
     get_service_client().table("tasks").update({"is_archived": True}).eq("workstream_id", workstream_id).execute()
 
     if active_workstream == workstream_id:
-        # Its sidebar entry (and filter) is gone now - bounce to "all" instead
-        # of leaving the page pointed at an unreachable workstream filter.
-        return HTMLResponse("", headers={"HX-Redirect": "/?workstream=all"})
+        # Its board tab (and filter) is gone now - bounce to the project's
+        # "all workstreams" view instead of a now-unreachable workstream filter.
+        return HTMLResponse("", headers={"HX-Redirect": f"/?project={active_project}&workstream=all"})
 
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 

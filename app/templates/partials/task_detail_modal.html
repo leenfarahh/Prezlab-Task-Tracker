@@ -1,5 +1,6 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-detail', 'click')">
   <form class="modal-card" hx-post="/tasks/{{ task.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
     <input name="title" required value="{{ task.title }}" autofocus />
 
@@ -31,20 +32,20 @@
     <div class="modal-actions" style="justify-content: space-between;">
       <div style="display: flex; gap: 8px;">
         <button type="button" class="link-muted" style="color: var(--blocked);"
-                hx-post="/tasks/{{ task.id }}/delete" hx-vals='{"active_workstream": "{{ active_workstream }}"}'
+                hx-post="/tasks/{{ task.id }}/delete" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
                 hx-target="#modal-root" hx-swap="innerHTML"
                 hx-confirm="Delete this task? This can't be undone.">
           Delete
         </button>
         {% if task.is_archived %}
         <button type="button" class="link-muted"
-                hx-post="/tasks/{{ task.id }}/unarchive" hx-vals='{"active_workstream": "{{ active_workstream }}"}'
+                hx-post="/tasks/{{ task.id }}/unarchive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
                 hx-target="#modal-root" hx-swap="innerHTML">
           Unarchive
         </button>
         {% else %}
         <button type="button" class="link-muted"
-                hx-post="/tasks/{{ task.id }}/archive" hx-vals='{"active_workstream": "{{ active_workstream }}"}'
+                hx-post="/tasks/{{ task.id }}/archive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
                 hx-target="#modal-root" hx-swap="innerHTML">
           Archive
         </button>

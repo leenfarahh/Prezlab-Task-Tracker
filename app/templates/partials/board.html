@@ -1,24 +1,42 @@
 {% import "partials/task_card.html" as tc %}
+{% import "partials/health_strip.html" as hs %}
 <section class="board-section" id="board-container"
          {% if oob %}hx-swap-oob="true"{% endif %}
-         hx-get="/partials/board?workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
-  {% if active_workstream != "archived" %}
+         hx-get="/partials/board?project={{ active_project }}&workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
+  {% if active_project != "archived" %}
   <div class="board-topbar">
-    <div class="tab-strip">
-      <a href="/?workstream=all" hx-boost="true" class="tab {{ 'active' if active_workstream == 'all' else '' }}">All</a>
+    {% if scoped_project %}
+    <div class="subtab-strip">
+      <a href="/?project={{ scoped_project.id }}&workstream=all" class="tab {{ 'active' if active_workstream == 'all' else '' }}">All</a>
       {% for ws in tab_workstreams %}
-      <a href="/?workstream={{ ws.id }}" hx-boost="true" class="tab {{ 'active' if active_workstream == ws.id else '' }}">{{ ws.name }}</a>
+      <a href="/?project={{ scoped_project.id }}&workstream={{ ws.id }}" class="tab {{ 'active' if active_workstream == ws.id else '' }}">{{ ws.name }}</a>
+      {% endfor %}
+      <a href="/?project={{ scoped_project.id }}&workstream=by_user" class="tab {{ 'active' if active_workstream == 'by_user' else '' }}">By user</a>
+    </div>
+    {% else %}
+    <div class="tab-strip">
+      <a href="/?project=all" class="tab {{ 'active' if active_project == 'all' else '' }}">All</a>
+      {% for p in tab_projects %}
+      <a href="/?project={{ p.id }}" class="tab {{ 'active' if active_project == p.id else '' }}">{{ p.name }}</a>
       {% endfor %}
     </div>
-    {% if active_workstream == "all" %}
+    {% endif %}
+
+    {% if show_new_project %}
     <button class="btn-primary"
-            hx-get="/partials/new-workstream-modal?active_workstream={{ active_workstream }}"
+            hx-get="/partials/new-project-modal"
+            hx-target="#modal-root" hx-swap="innerHTML">
+      + New project
+    </button>
+    {% elif show_new_workstream %}
+    <button class="btn-primary"
+            hx-get="/partials/new-workstream-modal?project_id={{ scoped_project.id }}"
             hx-target="#modal-root" hx-swap="innerHTML">
       + New workstream
     </button>
     {% elif show_new_task %}
     <button class="btn-primary"
-            hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}"
+            hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}&active_project={{ active_project }}"
             hx-target="#modal-root" hx-swap="innerHTML">
       + New task
     </button>
@@ -26,12 +44,71 @@
   </div>
   {% endif %}
 
-  {% if active_workstream != "all" %}
+  {% if scoped_project or active_project == "archived" %}
   <div class="board-header">
     <h1>{{ board_title }}</h1>
+    {% if scoped_workstream %}
+    <button type="button" class="link-muted"
+            hx-get="/partials/edit-workstream-modal?workstream_id={{ scoped_workstream.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+            hx-target="#modal-root" hx-swap="innerHTML">
+      Edit
+    </button>
+    {% endif %}
   </div>
   {% endif %}
 
+  {% if project_overview %}
+  <div class="ws-overview">
+    <div class="ws-overview-item">
+      <span class="ws-overview-label">Workstreams</span>
+      <span class="ws-overview-value">{{ project_overview.workstream_count }}</span>
+    </div>
+    <div class="ws-overview-item">
+      <span class="ws-overview-label">Tasks</span>
+      <span class="ws-overview-value">{{ project_overview.done_count }} / {{ project_overview.total_tasks }} done</span>
+    </div>
+    <div class="ws-overview-strip">
+      {{ hs.health_strip(project_overview.segments) }}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if date_summary %}
+  <div class="date-summary">
+    <div class="date-block date-block-overdue">
+      <span class="date-block-count">{{ date_summary.overdue }}</span>
+      <span class="date-block-label">Overdue</span>
+    </div>
+    <div class="date-block date-block-week">
+      <span class="date-block-count">{{ date_summary.due_this_week }}</span>
+      <span class="date-block-label">Due this week</span>
+    </div>
+    <div class="date-block date-block-upcoming">
+      <span class="date-block-count">{{ date_summary.upcoming }}</span>
+      <span class="date-block-label">Upcoming</span>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if active_workstream == "by_user" and scoped_project %}
+  <div class="board-grid" style="grid-template-columns: repeat({{ by_user_columns | length if by_user_columns else 1 }}, 1fr);">
+    {% for col in by_user_columns %}
+    <div class="board-column">
+      <p class="column-header">
+        <span>{{ col.assignee.full_name if col.assignee else "Unassigned" }}</span>
+        <span class="column-count">{{ col.tasks | length }}</span>
+      </p>
+      {% for task in col.tasks %}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="board-column">
+      <p class="empty-column">Nothing here.</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
   <div class="board-grid">
     {% for status in status_order %}
     <div class="board-column">
@@ -40,11 +117,12 @@
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
       {% else %}
         <p class="empty-column">Nothing here.</p>
       {% endfor %}
     </div>
     {% endfor %}
   </div>
+  {% endif %}
 </section>

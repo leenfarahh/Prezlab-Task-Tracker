@@ -5,15 +5,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import tokens
+from app.config import ALLOWED_LOGIN_EMAILS
 from app.supabase_client import get_service_client
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-# No Supabase Auth: email is the identity, gated only to the company domain.
-# There is no proof the requester owns the address - acceptable only because
-# this app is reachable solely on the enterprise network, not the public internet.
-ALLOWED_EMAIL_DOMAIN = "prezlab.com"
+# No Supabase Auth: email is the identity, gated to an explicit allow-list
+# (ALLOWED_LOGIN_EMAILS in .env) rather than a company domain. There is no
+# proof the requester owns the address - acceptable only because this app is
+# reachable solely on the enterprise network, not the public internet.
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -24,9 +25,9 @@ def login_page(request: Request, error: str | None = None):
 @router.post("/login")
 def login(request: Request, email: str = Form(...)):
     email = email.strip().lower()
-    if not email.endswith(f"@{ALLOWED_EMAIL_DOMAIN}"):
+    if email not in ALLOWED_LOGIN_EMAILS:
         return RedirectResponse(
-            url=f"/login?error={quote(f'Use your @{ALLOWED_EMAIL_DOMAIN} email.')}",
+            url=f"/login?error={quote('This email is not on the access list. Contact an admin to be added.')}",
             status_code=303,
         )
 

@@ -1,7 +1,17 @@
 {% extends "base.html" %}
 {% block body %}
 <main class="layout">
-  {% include "partials/sidebar.html" %}
+  <aside class="sidebar" id="sidebar-container">
+    <div class="sidebar-head">
+      <img src="/static/logo.png" alt="Prezlab" class="logo-mark" />
+      <button type="button" class="icon-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#10094;</button>
+    </div>
+    <div id="sidebar-body"
+         hx-get="/partials/sidebar?project={{ active_project }}&workstream={{ active_workstream }}"
+         hx-trigger="every 6s" hx-swap="morph:innerHTML">
+      {% include "partials/sidebar.html" %}
+    </div>
+  </aside>
   <div class="board-wrap">
     <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
     {% include board_template %}

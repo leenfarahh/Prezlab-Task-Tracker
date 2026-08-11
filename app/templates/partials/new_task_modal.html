@@ -2,6 +2,7 @@
   <form class="modal-card" hx-post="/tasks" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">New task</p>
     <input type="hidden" name="workstream_id" value="{{ workstream_id }}" />
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
 
     <input name="title" required placeholder="What needs to happen?" autofocus />
 

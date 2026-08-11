@@ -48,13 +48,26 @@ def main():
         sys.exit(1)
     owner_id = profiles[0]["id"]
 
+    projects = (
+        supabase.table("projects")
+        .insert(
+            [
+                {"name": "Product A", "owner_id": owner_id},
+                {"name": "Product B", "owner_id": owner_id},
+                {"name": "Internal", "owner_id": owner_id},
+            ]
+        )
+        .execute()
+        .data
+    )
+
+    workstream_names = ["Board Deck Q3", "Brand Refresh", "Template Library v2"]
     workstreams = (
         supabase.table("workstreams")
         .insert(
             [
-                {"name": "Product A - Board Deck Q3", "client_label": "Product A", "owner_id": owner_id, "color": "#4C5FD5"},
-                {"name": "Product B - Brand Refresh", "client_label": "Product B", "owner_id": owner_id, "color": "#3F9169"},
-                {"name": "Internal - Template Library v2", "client_label": "Internal", "owner_id": owner_id, "color": "#E8A33D"},
+                {"name": name, "project_id": project["id"], "owner_id": owner_id}
+                for project, name in zip(projects, workstream_names)
             ]
         )
         .execute()
@@ -77,7 +90,7 @@ def main():
             )
 
     supabase.table("tasks").insert(rows).execute()
-    print(f"Seeded {len(workstreams)} workstreams and {len(rows)} tasks.")
+    print(f"Seeded {len(projects)} projects, {len(workstreams)} workstreams, and {len(rows)} tasks.")
 
 
 if __name__ == "__main__":

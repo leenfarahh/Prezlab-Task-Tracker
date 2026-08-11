@@ -27,8 +27,13 @@ create table if not exists public.profiles (
   full_name text not null,
   email text not null,
   avatar_color text not null default '#4C5FD5',
+  role text,
+  avatar_url text,
   created_at timestamptz not null default now()
 );
+
+alter table public.profiles add column if not exists role text;
+alter table public.profiles add column if not exists avatar_url text;
 
 -- Detach from auth.users and enforce one profile per email, for installs that
 -- ran an earlier version of this file (both are no-ops on a fresh project).
@@ -45,12 +50,27 @@ end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user();
 
+-- ---------- Projects ----------
+-- Top-level grouping above workstreams: Project -> Workstream -> Task/assignee.
+-- A workstream's old "client_label" (a plain string, shown in the UI as
+-- "Project name") is exactly what this formalizes into a real entity.
+
+create table if not exists public.projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null, -- generic label only, e.g. "Client A" - never a real client name (see confidentiality note in README)
+  owner_id uuid references public.profiles (id),
+  is_archived boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists projects_is_archived_idx on public.projects (is_archived);
+
 -- ---------- Workstreams ----------
 
 create table if not exists public.workstreams (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  client_label text, -- generic label only, e.g. "Client A" - never a real client name (see confidentiality note in README)
+  project_id uuid not null references public.projects (id),
   owner_id uuid references public.profiles (id),
   color text not null default '#4C5FD5',
   is_archived boolean not null default false,
@@ -184,6 +204,7 @@ create policy "auth_tokens no client access" on public.auth_tokens
 -- require_login, not here.
 
 alter table public.profiles enable row level security;
+alter table public.projects enable row level security;
 alter table public.workstreams enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_activity enable row level security;
@@ -195,6 +216,10 @@ create policy "profiles readable by authenticated users" on public.profiles
 drop policy if exists "profiles updatable by owner" on public.profiles;
 create policy "profiles updatable by owner" on public.profiles
   for update using (auth.uid() = id);
+
+drop policy if exists "projects full access for authenticated users" on public.projects;
+create policy "projects full access for authenticated users" on public.projects
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 drop policy if exists "workstreams full access for authenticated users" on public.workstreams;
 create policy "workstreams full access for authenticated users" on public.workstreams
@@ -242,7 +267,58 @@ end $$;
 
 alter table public.workstreams drop column if exists product_id;
 alter table public.workstreams add column if not exists client_label text;
+
+-- Projects and workstreams are editable by any allow-listed user, not just a
+-- designated owner - only tasks are restricted to their creator/assignee.
+alter table public.projects drop column if exists owner_id;
+alter table public.workstreams drop column if exists owner_id;
 drop table if exists public.products;
 
 alter table public.tasks add column if not exists is_archived boolean not null default false;
 create index if not exists tasks_is_archived_idx on public.tasks (is_archived);
+
+-- ---------- Migrate workstreams under Project -> Workstream ----------
+-- Backfills a Project for every pre-existing workstream, reusing its old
+-- client_label as the project name (workstreams sharing a label merge into
+-- one project; label-less workstreams land in a shared "Unsorted" project),
+-- then drops the now-redundant client_label column. Every step is guarded,
+-- so this is safe to re-run once already applied.
+
+alter table public.workstreams add column if not exists project_id uuid references public.projects (id);
+
+do $$
+declare
+  ws_label record;
+  new_project_id uuid;
+begin
+  if exists (select 1 from public.workstreams where project_id is null) then
+    for ws_label in
+      select distinct coalesce(client_label, '') as label
+      from public.workstreams
+      where project_id is null
+    loop
+      insert into public.projects (name)
+      values (case when ws_label.label = '' then 'Unsorted' else ws_label.label end)
+      returning id into new_project_id;
+
+      update public.workstreams
+      set project_id = new_project_id
+      where project_id is null
+        and coalesce(client_label, '') = ws_label.label;
+    end loop;
+  end if;
+end $$;
+
+alter table public.workstreams alter column project_id set not null;
+alter table public.workstreams drop column if exists client_label;
+
+create index if not exists workstreams_project_idx on public.workstreams (project_id);
+
+-- ---------- Avatar storage ----------
+-- Public bucket for profile photos (see app/routers/user_router.py). Public
+-- so uploaded photos render via a plain <img src> without signed URLs - all
+-- writes still go through the service-role key, same as every other table.
+
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;

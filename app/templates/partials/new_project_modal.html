@@ -1,0 +1,12 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new-project', 'click')">
+  <form class="modal-card" hx-post="/projects" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px;">New project</p>
+
+    <input name="name" required placeholder="Project name" autofocus />
+
+    <div class="modal-actions">
+      <button type="button" id="modal-close-new-project" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+      <button type="submit" class="btn-primary">Create project</button>
+    </div>
+  </form>
+</div>
