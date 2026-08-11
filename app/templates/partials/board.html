@@ -2,9 +2,21 @@
 <section class="board-section" id="board-container"
          {% if oob %}hx-swap-oob="true"{% endif %}
          hx-get="/partials/board?workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
-  <div class="board-header">
-    <h1>{{ board_title }}</h1>
-    {% if show_new_task %}
+  {% if active_workstream != "archived" %}
+  <div class="board-topbar">
+    <div class="tab-strip">
+      <a href="/?workstream=all" hx-boost="true" class="tab {{ 'active' if active_workstream == 'all' else '' }}">All</a>
+      {% for ws in tab_workstreams %}
+      <a href="/?workstream={{ ws.id }}" hx-boost="true" class="tab {{ 'active' if active_workstream == ws.id else '' }}">{{ ws.name }}</a>
+      {% endfor %}
+    </div>
+    {% if active_workstream == "all" %}
+    <button class="btn-primary"
+            hx-get="/partials/new-workstream-modal?active_workstream={{ active_workstream }}"
+            hx-target="#modal-root" hx-swap="innerHTML">
+      + New workstream
+    </button>
+    {% elif show_new_task %}
     <button class="btn-primary"
             hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}"
             hx-target="#modal-root" hx-swap="innerHTML">
@@ -12,10 +24,17 @@
     </button>
     {% endif %}
   </div>
+  {% endif %}
+
+  {% if active_workstream != "all" %}
+  <div class="board-header">
+    <h1>{{ board_title }}</h1>
+  </div>
+  {% endif %}
 
   <div class="board-grid">
     {% for status in status_order %}
-    <div>
+    <div class="board-column">
       <p class="column-header">
         <span>{{ status_label[status] }}</span>
         <span class="column-count">{{ grouped[status] | length }}</span>

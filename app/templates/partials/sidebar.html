@@ -2,7 +2,11 @@
 <aside class="sidebar" id="sidebar-container"
        {% if oob %}hx-swap-oob="true"{% endif %}
        hx-get="/partials/sidebar?workstream={{ active_workstream }}" hx-trigger="every 6s" hx-swap="innerHTML">
-  <p class="eyebrow" style="margin-bottom: 16px;">Prezlab AI Team</p>
+  <div class="sidebar-head">
+    <img src="/static/logo.png" alt="Prezlab" class="logo-mark" />
+    <button type="button" class="icon-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#10094;</button>
+  </div>
+  <p class="eyebrow" style="margin-bottom: 16px;">AI Team</p>
 
   <a href="/?workstream=all" hx-boost="true"
      class="sidebar-item {{ 'active' if active_workstream == 'all' else '' }}">
@@ -25,21 +29,17 @@
     {% endfor %}
   </div>
 
-  {% if active_workstream not in ("archived", "archived_workstreams") %}
-  <button class="btn-ghost" style="width: 100%; margin-top: 12px;"
-          hx-get="/partials/new-workstream-modal?active_workstream={{ active_workstream }}"
-          hx-target="#modal-root" hx-swap="innerHTML">
-    + New workstream
-  </button>
-  {% endif %}
-
   <a href="/archived" hx-boost="true"
      class="sidebar-item {{ 'active' if active_workstream == 'archived' else '' }}"
-     style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line);">
+     style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
     Archived tasks
   </a>
   <a href="/archived-workstreams" hx-boost="true"
      class="sidebar-item {{ 'active' if active_workstream == 'archived_workstreams' else '' }}">
     Archived workstreams
   </a>
+
+  <form method="post" action="/logout" style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
+    <button type="submit" class="sidebar-item" style="width: 100%;">Log out</button>
+  </form>
 </aside>

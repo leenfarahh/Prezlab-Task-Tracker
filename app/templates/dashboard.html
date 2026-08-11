@@ -2,7 +2,10 @@
 {% block body %}
 <main class="layout">
   {% include "partials/sidebar.html" %}
-  {% include board_template %}
+  <div class="board-wrap">
+    <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
+    {% include board_template %}
+  </div>
 </main>
 <div id="modal-root"></div>
 {% endblock %}

@@ -29,15 +29,6 @@ def archived_workstreams_partial(request: Request):
     return templates.TemplateResponse("partials/archived_workstreams.html", ctx)
 
 
-COLOR_CHOICES = [
-    ("#4C5FD5", "Indigo"),
-    ("#3F9169", "Green"),
-    ("#E8A33D", "Amber"),
-    ("#8E6FD1", "Purple"),
-    ("#D64545", "Red"),
-]
-
-
 @router.get("/partials/new-workstream-modal", response_class=HTMLResponse)
 def new_workstream_modal(request: Request, active_workstream: str = "all"):
     redirect = require_login(request)
@@ -45,7 +36,7 @@ def new_workstream_modal(request: Request, active_workstream: str = "all"):
         return redirect
     return templates.TemplateResponse(
         "partials/new_workstream_modal.html",
-        {"request": request, "colors": COLOR_CHOICES, "active_workstream": active_workstream},
+        {"request": request, "active_workstream": active_workstream},
     )
 
 
@@ -54,7 +45,6 @@ def create_workstream(
     request: Request,
     name: str = Form(...),
     client_label: str = Form(""),
-    color: str = Form(COLOR_CHOICES[0][0]),
     active_workstream: str = Form("all"),
 ):
     redirect = require_login(request)
@@ -66,7 +56,6 @@ def create_workstream(
         {
             "name": name.strip(),
             "client_label": client_label.strip() or None,
-            "color": color,
             "owner_id": user["id"],
         }
     ).execute()
@@ -87,7 +76,7 @@ def edit_workstream_modal(request: Request, workstream_id: str, active_workstrea
     )
     return templates.TemplateResponse(
         "partials/edit_workstream_modal.html",
-        {"request": request, "workstream": workstream, "colors": COLOR_CHOICES, "active_workstream": active_workstream},
+        {"request": request, "workstream": workstream, "active_workstream": active_workstream},
     )
 
 
@@ -97,7 +86,6 @@ def update_workstream(
     workstream_id: str,
     name: str = Form(...),
     client_label: str = Form(""),
-    color: str = Form(COLOR_CHOICES[0][0]),
     active_workstream: str = Form("all"),
 ):
     redirect = require_login(request)
@@ -108,7 +96,6 @@ def update_workstream(
         {
             "name": name.strip(),
             "client_label": client_label.strip() or None,
-            "color": color,
         }
     ).eq("id", workstream_id).execute()
 

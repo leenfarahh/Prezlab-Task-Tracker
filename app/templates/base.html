@@ -4,8 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Team Task Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
   <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
+  <script>
+    if (localStorage.getItem('sidebarCollapsed') === '1') {
+      document.documentElement.classList.add('sidebar-collapsed');
+    }
+    function toggleSidebar() {
+      document.documentElement.classList.toggle('sidebar-collapsed');
+      localStorage.setItem('sidebarCollapsed', document.documentElement.classList.contains('sidebar-collapsed') ? '1' : '0');
+    }
+  </script>
 </head>
 <body>
   {% block body %}{% endblock %}

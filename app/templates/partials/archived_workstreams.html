@@ -8,7 +8,7 @@
   {% for ws in workstreams %}
   <div class="task-card" style="display: flex; align-items: center; justify-content: space-between; cursor: default; max-width: 420px;">
     <div>
-      <p class="workstream-tag" style="color: {{ ws.color }};">{{ ws.client_label or 'Workstream' }}</p>
+      <p class="workstream-tag">{{ ws.client_label or 'Workstream' }}</p>
       <p class="task-card-title">{{ ws.name }}</p>
       <p class="task-card-meta">{{ ws.archived_task_count }} archived task{{ '' if ws.archived_task_count == 1 else 's' }}</p>
     </div>

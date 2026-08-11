@@ -11,6 +11,31 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
+    """Returns a permission-denied response unless the current user is this
+    task's creator or assignee, else None. Keeps teammates from editing or
+    deleting tasks that aren't theirs to touch.
+    """
+    user = current_user(request)
+    task = (
+        get_service_client()
+        .table("tasks")
+        .select("created_by, assignee_id")
+        .eq("id", task_id)
+        .single()
+        .execute()
+        .data
+    )
+    if user["id"] in (task["created_by"], task["assignee_id"]):
+        return None
+
+    return HTMLResponse(
+        templates.get_template("partials/permission_denied_modal.html").render(
+            {"request": request, "message": "Only this task's creator or assignee can do that."}
+        )
+    )
+
+
 def _refreshed_fragments(request: Request, active_workstream: str) -> str:
     """Renders board + sidebar as out-of-band swaps, closing the modal in the process."""
     board_ctx = {
@@ -72,6 +97,9 @@ def update_task(
     redirect = require_login(request)
     if redirect:
         return redirect
+    denial = _task_owner_denial(request, task_id)
+    if denial:
+        return denial
 
     get_service_client().table("tasks").update(
         {
@@ -91,6 +119,9 @@ def archive_task(request: Request, task_id: str, active_workstream: str = Form("
     redirect = require_login(request)
     if redirect:
         return redirect
+    denial = _task_owner_denial(request, task_id)
+    if denial:
+        return denial
 
     get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
 
@@ -102,6 +133,9 @@ def unarchive_task(request: Request, task_id: str, active_workstream: str = Form
     redirect = require_login(request)
     if redirect:
         return redirect
+    denial = _task_owner_denial(request, task_id)
+    if denial:
+        return denial
 
     get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
 
@@ -113,6 +147,9 @@ def delete_task(request: Request, task_id: str, active_workstream: str = Form("a
     redirect = require_login(request)
     if redirect:
         return redirect
+    denial = _task_owner_denial(request, task_id)
+    if denial:
+        return denial
 
     get_service_client().table("tasks").delete().eq("id", task_id).execute()
 

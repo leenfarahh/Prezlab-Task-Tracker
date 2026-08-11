@@ -2,7 +2,7 @@
 <button class="task-card {{ 'flagged' if flagged else '' }}"
         hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
   {% if active_workstream in ("all", "archived") and task.workstream_name %}
-  <p class="workstream-tag" style="color: {{ task.workstream_color }};">{{ task.workstream_name }}</p>
+  <p class="workstream-tag">{{ task.workstream_name }}</p>
   {% endif %}
   <div class="task-card-top">
     <p class="task-card-title">{{ task.title }}</p>

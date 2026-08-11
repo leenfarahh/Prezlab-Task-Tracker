@@ -1,0 +1,9 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-denied', 'click')">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px; color: var(--blocked);">Not allowed</p>
+    <p style="margin: 0 0 16px; font-size: 14px;">{{ message }}</p>
+    <div class="modal-actions">
+      <button type="button" id="modal-close-denied" class="btn-primary" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">OK</button>
+    </div>
+  </div>
+</div>

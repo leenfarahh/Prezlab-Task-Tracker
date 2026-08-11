@@ -6,12 +6,6 @@
     <input name="name" required placeholder="Workstream name" autofocus />
     <input name="client_label" placeholder="Project name (optional)" />
 
-    <select name="color">
-      {% for hex, label in colors %}
-      <option value="{{ hex }}">{{ label }}</option>
-      {% endfor %}
-    </select>
-
     <div class="modal-actions">
       <button type="button" id="modal-close-new-workstream" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
       <button type="submit" class="btn-primary">Create workstream</button>

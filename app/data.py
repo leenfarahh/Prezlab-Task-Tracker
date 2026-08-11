@@ -62,9 +62,7 @@ def build_board_context(active_workstream: str) -> dict:
     for t in tasks:
         t["overdue"] = is_overdue(t)
         t["due_date_display"] = format_due_date(t["due_date"]) if t["due_date"] else None
-        owning_workstream = workstreams_by_id[t["workstream_id"]]
-        t["workstream_name"] = owning_workstream["name"]
-        t["workstream_color"] = owning_workstream["color"]
+        t["workstream_name"] = workstreams_by_id[t["workstream_id"]]["name"]
 
     if show_archived:
         title = "Archived tasks"
@@ -81,6 +79,7 @@ def build_board_context(active_workstream: str) -> dict:
         "show_new_task": not show_archived and active_workstream != "all",
         "profiles": fetch_profiles(),
         "flagged_ids": set(),
+        "tab_workstreams": workstreams,
     }
 
 
