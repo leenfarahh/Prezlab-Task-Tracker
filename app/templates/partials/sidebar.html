@@ -11,9 +11,8 @@
 
   <div style="margin-top: 8px;">
     {% for ws in workstreams %}
-    <div style="display: flex; align-items: center; gap: 2px; margin-bottom: 4px;">
-      <a href="/?workstream={{ ws.id }}" hx-boost="true"
-         class="sidebar-item {{ 'active' if active_workstream == ws.id else '' }}" style="flex: 1; margin-bottom: 0;">
+    <div class="sidebar-row {{ 'active' if active_workstream == ws.id else '' }}">
+      <a href="/?workstream={{ ws.id }}" hx-boost="true" class="sidebar-item" style="flex: 1;">
         <span>{{ ws.name }}</span>
         {{ hs.health_strip(ws.segments) }}
       </a>
@@ -26,9 +25,21 @@
     {% endfor %}
   </div>
 
+  {% if active_workstream not in ("archived", "archived_workstreams") %}
   <button class="btn-ghost" style="width: 100%; margin-top: 12px;"
           hx-get="/partials/new-workstream-modal?active_workstream={{ active_workstream }}"
           hx-target="#modal-root" hx-swap="innerHTML">
     + New workstream
   </button>
+  {% endif %}
+
+  <a href="/archived" hx-boost="true"
+     class="sidebar-item {{ 'active' if active_workstream == 'archived' else '' }}"
+     style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line);">
+    Archived tasks
+  </a>
+  <a href="/archived-workstreams" hx-boost="true"
+     class="sidebar-item {{ 'active' if active_workstream == 'archived_workstreams' else '' }}">
+    Archived workstreams
+  </a>
 </aside>

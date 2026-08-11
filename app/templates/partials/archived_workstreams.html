@@ -1,0 +1,24 @@
+<section class="board-section" id="board-container"
+         {% if oob %}hx-swap-oob="true"{% endif %}
+         hx-get="/partials/archived-workstreams" hx-trigger="every 5s" hx-swap="innerHTML">
+  <div class="board-header">
+    <h1>Archived workstreams</h1>
+  </div>
+
+  {% for ws in workstreams %}
+  <div class="task-card" style="display: flex; align-items: center; justify-content: space-between; cursor: default; max-width: 420px;">
+    <div>
+      <p class="workstream-tag" style="color: {{ ws.color }};">{{ ws.client_label or 'Workstream' }}</p>
+      <p class="task-card-title">{{ ws.name }}</p>
+      <p class="task-card-meta">{{ ws.archived_task_count }} archived task{{ '' if ws.archived_task_count == 1 else 's' }}</p>
+    </div>
+    <button type="button" class="btn-ghost"
+            hx-post="/workstreams/{{ ws.id }}/unarchive"
+            hx-target="#modal-root" hx-swap="innerHTML">
+      Unarchive
+    </button>
+  </div>
+  {% else %}
+  <p class="empty-column">Nothing archived.</p>
+  {% endfor %}
+</section>

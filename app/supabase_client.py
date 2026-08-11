@@ -32,12 +32,17 @@ class _RetryOnDisconnectTransport(httpx.HTTPTransport):
     between this app's periodic polling requests (the board/sidebar poll every
     5-6s). httpx's own `retries=` option only covers the initial TCP connect,
     not a connection reused from the pool that's then found to be closed, so
-    without this it surfaces as a hard 500 on whichever poll loses the race.
-    Only safe/idempotent methods are retried - a write could have already
-    reached the server before the connection dropped.
+    without this it surfaces as a hard 500 on whichever request loses the race.
+
+    PATCH and DELETE are included alongside the read methods because every
+    .update()/.delete() call in this app (see app/routers/*.py) sets fields to
+    a fixed literal value or removes a row by id - re-sending an identical
+    request changes nothing if the first attempt actually landed. POST is
+    deliberately excluded: retrying an .insert() that secretly succeeded
+    would create a duplicate row.
     """
 
-    _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+    _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "PATCH", "DELETE"}
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         try:

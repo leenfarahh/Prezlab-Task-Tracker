@@ -50,7 +50,7 @@ drop function if exists public.handle_new_user();
 create table if not exists public.workstreams (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  client_label text, -- shown in the UI as "Project name" - generic label only, e.g. "Project A", never a real client name
+  client_label text, -- generic label only, e.g. "Client A" - never a real client name (see confidentiality note in README)
   owner_id uuid references public.profiles (id),
   color text not null default '#4C5FD5',
   is_archived boolean not null default false,
@@ -91,7 +91,7 @@ create trigger tasks_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------- Activity log ----------
--- Append-only trail that the UI feed reads from.
+-- Append-only trail that both the UI feed and the Pulse digest read from.
 
 create table if not exists public.task_activity (
   id uuid primary key default gen_random_uuid(),
@@ -134,6 +134,19 @@ create trigger tasks_log_change
   after insert or update on public.tasks
   for each row execute procedure public.log_task_change();
 
+-- ---------- Pulse digests ----------
+-- Cached LLM output so the dashboard doesn't call the model on every page load.
+
+create table if not exists public.pulse_digests (
+  id uuid primary key default gen_random_uuid(),
+  generated_at timestamptz not null default now(),
+  generated_by uuid references public.profiles (id),
+  summary text not null,
+  flagged_task_ids uuid[] not null default '{}',
+  model text not null default 'claude-sonnet-5',
+  input_task_count int not null default 0
+);
+
 -- ---------- Session refresh tokens ----------
 -- The signed cookie set on login (app/main.py) is a short-lived, in-memory
 -- session. This table backs a longer-lived refresh token in a second cookie,
@@ -174,6 +187,7 @@ alter table public.profiles enable row level security;
 alter table public.workstreams enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_activity enable row level security;
+alter table public.pulse_digests enable row level security;
 
 drop policy if exists "profiles readable by authenticated users" on public.profiles;
 create policy "profiles readable by authenticated users" on public.profiles
@@ -197,6 +211,13 @@ drop policy if exists "activity insertable by authenticated users" on public.tas
 create policy "activity insertable by authenticated users" on public.task_activity
   for insert with check (auth.role() = 'authenticated');
 
+drop policy if exists "digests readable by authenticated users" on public.pulse_digests;
+create policy "digests readable by authenticated users" on public.pulse_digests
+  for select using (auth.role() = 'authenticated');
+drop policy if exists "digests insertable by authenticated users" on public.pulse_digests;
+create policy "digests insertable by authenticated users" on public.pulse_digests
+  for insert with check (auth.role() = 'authenticated');
+
 -- ---------- Realtime ----------
 -- Enables the dashboard to update live as tasks change status, which is the
 -- mechanism behind "visibility at a glance" rather than a manual refresh.
@@ -218,3 +239,10 @@ begin
     alter publication supabase_realtime add table public.task_activity;
   end if;
 end $$;
+
+alter table public.workstreams drop column if exists product_id;
+alter table public.workstreams add column if not exists client_label text;
+drop table if exists public.products;
+
+alter table public.tasks add column if not exists is_archived boolean not null default false;
+create index if not exists tasks_is_archived_idx on public.tasks (is_archived);

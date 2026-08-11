@@ -3,11 +3,31 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import build_sidebar_context
+from app.data import build_archived_workstreams_context, build_sidebar_context
 from app.supabase_client import get_service_client
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _refreshed_archive_fragments(request: Request) -> str:
+    """Renders the archived-workstreams list + sidebar as out-of-band swaps, closing the modal."""
+    board_ctx = {"request": request, "oob": True, **build_archived_workstreams_context()}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context("archived_workstreams")}
+
+    board_html = templates.get_template("partials/archived_workstreams.html").render(board_ctx)
+    sidebar_html = templates.get_template("partials/sidebar.html").render(sidebar_ctx)
+    return board_html + sidebar_html
+
+
+@router.get("/partials/archived-workstreams", response_class=HTMLResponse)
+def archived_workstreams_partial(request: Request):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {"request": request, **build_archived_workstreams_context()}
+    return templates.TemplateResponse("partials/archived_workstreams.html", ctx)
+
 
 COLOR_CHOICES = [
     ("#4C5FD5", "Indigo"),
@@ -103,6 +123,9 @@ def archive_workstream(request: Request, workstream_id: str, active_workstream: 
         return redirect
 
     get_service_client().table("workstreams").update({"is_archived": True}).eq("id", workstream_id).execute()
+    # A workstream disappearing from the board shouldn't leave its tasks
+    # dangling as live-but-orphaned - archive them as one unit.
+    get_service_client().table("tasks").update({"is_archived": True}).eq("workstream_id", workstream_id).execute()
 
     if active_workstream == workstream_id:
         # Its sidebar entry (and filter) is gone now - bounce to "all" instead
@@ -111,3 +134,17 @@ def archive_workstream(request: Request, workstream_id: str, active_workstream: 
 
     sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
+
+
+@router.post("/workstreams/{workstream_id}/unarchive", response_class=HTMLResponse)
+def unarchive_workstream(request: Request, workstream_id: str):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    get_service_client().table("workstreams").update({"is_archived": False}).eq("id", workstream_id).execute()
+    # Mirrors archive_workstream: tasks that went into archive as part of the
+    # workstream come back out as part of it too.
+    get_service_client().table("tasks").update({"is_archived": False}).eq("workstream_id", workstream_id).execute()
+
+    return HTMLResponse(_refreshed_archive_fragments(request))

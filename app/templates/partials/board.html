@@ -4,7 +4,7 @@
          hx-get="/partials/board?workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
   <div class="board-header">
     <h1>{{ board_title }}</h1>
-    {% if active_workstream != "all" %}
+    {% if show_new_task %}
     <button class="btn-primary"
             hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}"
             hx-target="#modal-root" hx-swap="innerHTML">
@@ -18,10 +18,10 @@
     <div>
       <p class="column-header">
         <span>{{ status_label[status] }}</span>
-        <span>{{ grouped[status] | length }}</span>
+        <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], task.overdue, active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_workstream, task.id in flagged_ids) }}
       {% else %}
         <p class="empty-column">Nothing here.</p>
       {% endfor %}

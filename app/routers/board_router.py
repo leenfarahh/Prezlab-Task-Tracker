@@ -3,9 +3,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import build_board_context, build_sidebar_context, fetch_profiles
+from app.data import build_archived_workstreams_context, build_board_context, build_sidebar_context, fetch_profiles
 from app.supabase_client import get_service_client
-from app.view_helpers import PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
+from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -19,12 +19,35 @@ def dashboard(request: Request, workstream: str = "all"):
 
     ctx = {
         "request": request,
+        "board_template": "partials/board.html",
         "status_order": STATUS_ORDER,
         "status_label": STATUS_LABEL,
         "status_color": STATUS_COLOR,
         "priority_label": PRIORITY_LABEL,
+        "priority_color": PRIORITY_COLOR,
         **build_sidebar_context(workstream),
         **build_board_context(workstream),
+    }
+    ctx["error"] = None
+    return templates.TemplateResponse("dashboard.html", ctx)
+
+
+@router.get("/archived", response_class=HTMLResponse)
+def archived(request: Request):
+    return dashboard(request, workstream="archived")
+
+
+@router.get("/archived-workstreams", response_class=HTMLResponse)
+def archived_workstreams_page(request: Request):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    ctx = {
+        "request": request,
+        "board_template": "partials/archived_workstreams.html",
+        **build_sidebar_context("archived_workstreams"),
+        **build_archived_workstreams_context(),
     }
     ctx["error"] = None
     return templates.TemplateResponse("dashboard.html", ctx)
@@ -41,6 +64,7 @@ def board_partial(request: Request, workstream: str = "all"):
         "status_label": STATUS_LABEL,
         "status_color": STATUS_COLOR,
         "priority_label": PRIORITY_LABEL,
+        "priority_color": PRIORITY_COLOR,
         **build_board_context(workstream),
     }
     return templates.TemplateResponse("partials/board.html", ctx)

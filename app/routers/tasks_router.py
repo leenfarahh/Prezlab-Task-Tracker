@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from app.auth import current_user, require_login
 from app.data import build_board_context, build_sidebar_context
 from app.supabase_client import get_service_client
-from app.view_helpers import PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
+from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -19,6 +19,7 @@ def _refreshed_fragments(request: Request, active_workstream: str) -> str:
         "status_label": STATUS_LABEL,
         "status_color": STATUS_COLOR,
         "priority_label": PRIORITY_LABEL,
+        "priority_color": PRIORITY_COLOR,
         "oob": True,
         **build_board_context(active_workstream),
     }
@@ -81,6 +82,28 @@ def update_task(
             "due_date": due_date or None,
         }
     ).eq("id", task_id).execute()
+
+    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+
+
+@router.post("/tasks/{task_id}/archive", response_class=HTMLResponse)
+def archive_task(request: Request, task_id: str, active_workstream: str = Form("all")):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
+
+    return HTMLResponse(_refreshed_fragments(request, active_workstream))
+
+
+@router.post("/tasks/{task_id}/unarchive", response_class=HTMLResponse)
+def unarchive_task(request: Request, task_id: str, active_workstream: str = Form("all")):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
 
     return HTMLResponse(_refreshed_fragments(request, active_workstream))
 

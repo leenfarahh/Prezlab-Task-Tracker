@@ -1,7 +1,7 @@
-{% macro task_card(task, assignee, status_color, priority_label, overdue, active_workstream, flagged=False) -%}
+{% macro task_card(task, assignee, status_color, priority_label, priority_color, active_workstream, flagged=False) -%}
 <button class="task-card {{ 'flagged' if flagged else '' }}"
         hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
-  {% if active_workstream == "all" and task.workstream_name %}
+  {% if active_workstream in ("all", "archived") and task.workstream_name %}
   <p class="workstream-tag" style="color: {{ task.workstream_color }};">{{ task.workstream_name }}</p>
   {% endif %}
   <div class="task-card-top">
@@ -9,12 +9,12 @@
     <span class="status-dot" style="background-color: {{ status_color }};"></span>
   </div>
   <div class="task-card-meta">
-    <span style="font-family: var(--font-mono); text-transform: uppercase;">{{ priority_label }}</span>
-    {% if task.due_date %}
-      <span class="{{ 'overdue' if overdue else '' }}">{{ 'Overdue ' if overdue else 'Due ' }}{{ task.due_date }}</span>
+    <span class="priority-pill" style="background-color: {{ priority_color }};">{{ priority_label }}</span>
+    {% if task.due_date_display %}
+      <span class="{{ 'overdue' if task.overdue else '' }}">{{ 'Overdue ' if task.overdue else 'Due ' }}{{ task.due_date_display }}</span>
     {% endif %}
     {% if assignee %}
-      <span class="assignee">{{ assignee.full_name }}</span>
+      <span class="avatar" style="background-color: {{ assignee.avatar_color }};" title="{{ assignee.full_name }}">{{ assignee.initials }}</span>
     {% endif %}
   </div>
 </button>

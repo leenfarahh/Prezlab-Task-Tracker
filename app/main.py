@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import SESSION_SECRET
 from app.routers import auth_router, board_router, tasks_router, workstream_router
 
-app = FastAPI(title="Pulse - Prezlab AI Team Tracker")
+app = FastAPI(title="Prezlab AI Team Tracker")
 templates = Jinja2Templates(directory="app/templates")
 
 # Signed session cookie carrying {id, email, full_name} only - see app/supabase_client.py
