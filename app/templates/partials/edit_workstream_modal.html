@@ -1,14 +1,13 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-edit-workstream', 'click')">
   <form class="modal-card" hx-post="/workstreams/{{ workstream.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">Edit workstream</p>
-    <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
 
     <input name="name" required placeholder="Workstream name" value="{{ workstream.name }}" autofocus />
 
     <div class="modal-actions" style="justify-content: space-between;">
       <button type="button" class="link-muted" style="color: var(--blocked);"
-              hx-get="/partials/confirm-archive-workstream-modal?workstream_id={{ workstream.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+              hx-get="/partials/confirm-archive-workstream-modal?workstream_id={{ workstream.id }}&active_workstream={{ active_workstream }}"
               hx-target="#modal-root" hx-swap="innerHTML">
         Archive
       </button>

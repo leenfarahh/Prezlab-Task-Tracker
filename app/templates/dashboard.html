@@ -7,7 +7,7 @@
       <button type="button" class="icon-btn" onclick="toggleSidebar()" title="Collapse sidebar">&#10094;</button>
     </div>
     <div id="sidebar-body"
-         hx-get="/partials/sidebar?project={{ active_project }}&workstream={{ active_workstream }}"
+         hx-get="/partials/sidebar?workstream={{ active_workstream }}&project={{ active_project }}"
          hx-trigger="every 6s" hx-swap="morph:innerHTML">
       {% include "partials/sidebar.html" %}
     </div>

@@ -4,8 +4,8 @@ from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
 from app.data import (
-    build_archived_projects_context,
     build_archived_workstreams_context,
+    build_archived_projects_context,
     build_board_context,
     build_sidebar_context,
     fetch_profiles,
@@ -19,7 +19,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, project: str = "all", workstream: str = "all"):
+def dashboard(request: Request, workstream: str = "all", project: str = "all"):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -33,8 +33,8 @@ def dashboard(request: Request, project: str = "all", workstream: str = "all"):
         "priority_label": PRIORITY_LABEL,
         "priority_color": PRIORITY_COLOR,
         "viewer": fetch_profiles().get(current_user(request)["id"]),
-        **build_sidebar_context(project, workstream),
-        **build_board_context(project, workstream),
+        **build_sidebar_context(workstream, project),
+        **build_board_context(workstream, project),
     }
     ctx["error"] = None
     return templates.TemplateResponse("dashboard.html", ctx)
@@ -42,24 +42,7 @@ def dashboard(request: Request, project: str = "all", workstream: str = "all"):
 
 @router.get("/archived", response_class=HTMLResponse)
 def archived(request: Request):
-    return dashboard(request, project="archived", workstream="all")
-
-
-@router.get("/archived-workstreams", response_class=HTMLResponse)
-def archived_workstreams_page(request: Request):
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-
-    ctx = {
-        "request": request,
-        "board_template": "partials/archived_workstreams.html",
-        "viewer": fetch_profiles().get(current_user(request)["id"]),
-        **build_sidebar_context("archived_workstreams"),
-        **build_archived_workstreams_context(),
-    }
-    ctx["error"] = None
-    return templates.TemplateResponse("dashboard.html", ctx)
+    return dashboard(request, workstream="archived", project="all")
 
 
 @router.get("/archived-projects", response_class=HTMLResponse)
@@ -79,8 +62,25 @@ def archived_projects_page(request: Request):
     return templates.TemplateResponse("dashboard.html", ctx)
 
 
+@router.get("/archived-workstreams", response_class=HTMLResponse)
+def archived_workstreams_page(request: Request):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    ctx = {
+        "request": request,
+        "board_template": "partials/archived_workstreams.html",
+        "viewer": fetch_profiles().get(current_user(request)["id"]),
+        **build_sidebar_context("archived_workstreams"),
+        **build_archived_workstreams_context(),
+    }
+    ctx["error"] = None
+    return templates.TemplateResponse("dashboard.html", ctx)
+
+
 @router.get("/partials/board", response_class=HTMLResponse)
-def board_partial(request: Request, project: str = "all", workstream: str = "all"):
+def board_partial(request: Request, workstream: str = "all", project: str = "all"):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -91,17 +91,17 @@ def board_partial(request: Request, project: str = "all", workstream: str = "all
         "status_color": STATUS_COLOR,
         "priority_label": PRIORITY_LABEL,
         "priority_color": PRIORITY_COLOR,
-        **build_board_context(project, workstream),
+        **build_board_context(workstream, project),
     }
     return templates.TemplateResponse("partials/board.html", ctx)
 
 
 @router.get("/partials/sidebar", response_class=HTMLResponse)
-def sidebar_partial(request: Request, project: str = "all", workstream: str = "all"):
+def sidebar_partial(request: Request, workstream: str = "all", project: str = "all"):
     redirect = require_login(request)
     if redirect:
         return redirect
-    ctx = {"request": request, **build_sidebar_context(project, workstream)}
+    ctx = {"request": request, **build_sidebar_context(workstream, project)}
     return templates.TemplateResponse("partials/sidebar.html", ctx)
 
 
@@ -111,15 +111,15 @@ def empty_partial():
 
 
 @router.get("/partials/new-task-modal", response_class=HTMLResponse)
-def new_task_modal(request: Request, workstream_id: str, active_project: str = "all"):
+def new_task_modal(request: Request, project_id: str, active_workstream: str = "all"):
     redirect = require_login(request)
     if redirect:
         return redirect
     user = current_user(request)
     ctx = {
         "request": request,
-        "workstream_id": workstream_id,
-        "active_project": active_project,
+        "project_id": project_id,
+        "active_workstream": active_workstream,
         "profiles": list(fetch_profiles().values()),
         "current_user_id": user["id"],
     }
@@ -127,7 +127,7 @@ def new_task_modal(request: Request, workstream_id: str, active_project: str = "
 
 
 @router.get("/partials/task-detail-modal", response_class=HTMLResponse)
-def task_detail_modal(request: Request, task_id: str, project: str = "all", workstream: str = "all"):
+def task_detail_modal(request: Request, task_id: str, workstream: str = "all", project: str = "all"):
     # Clicking a task card is the most-used interaction in the app, and it used
     # to wait on two round trips back to back: require_login's profile check,
     # then the task row. Neither depends on the other, so they go together.
@@ -143,8 +143,8 @@ def task_detail_modal(request: Request, task_id: str, project: str = "all", work
     ctx = {
         "request": request,
         "task": task,
-        "active_project": project,
         "active_workstream": workstream,
+        "active_project": project,
         "status_order": STATUS_ORDER,
         "status_label": STATUS_LABEL,
         "profiles": list(fetch_profiles().values()),

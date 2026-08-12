@@ -2,6 +2,8 @@
 
 Same product as the Next.js/React version, rebuilt on a Python backend: FastAPI + Jinja2 + HTMX instead of Next.js/React, same Supabase schema underneath.
 
+Work is organised as **Workstream → Project → Task**: a workstream is the standing area of work (a client, a product, an internal track), a project is a single piece of delivery inside it, and tasks attach to a project. Archiving cascades downward — archiving a workstream archives its projects and their tasks as one unit.
+
 See also:
 - `docs/stack-decisions-python.md` — what changed vs. the JS version, and the two real trade-offs (polling instead of Realtime, manual session handling instead of `supabase-js`)
 
@@ -14,6 +16,8 @@ Same as the JS version:
 1. Create a project at supabase.com.
 2. Run `supabase/schema.sql` in the SQL editor.
 3. Copy the Project URL and `service_role` key from Project Settings → API.
+
+Re-running `schema.sql` on a database that predates the **Workstream → Project → Task** hierarchy (an earlier revision nested it the other way round) migrates it in place: the two tables and their child columns are renamed, so every existing row and task survives — what used to be a top-level project becomes a workstream, and each workstream it contained becomes one of that workstream's projects. The block is guarded, so it does nothing on a fresh project and is safe to re-run.
 
 ## 2. Configure environment variables
 
@@ -55,7 +59,7 @@ After signing in once (so a `profiles` row exists):
 python scripts/seed.py
 ```
 
-Creates the same three demo projects, three workstreams, and thirty tasks as the JS version's seed script.
+Creates the same three demo workstreams, three projects, and thirty tasks as the JS version's seed script.
 
 ## 5. Deploy
 
@@ -77,9 +81,9 @@ Same as the JS version: share a deployed preview link for round 1, collect feedb
 
 The board's "+" menu has a second entry alongside the normal new-task form: paste or type a note in plain language ("Review the Acme deck by Friday, ask Sanad to fix the budget slide") and it comes back as one or more pre-filled task drafts.
 
-How it works: `app/gemini_client.py` sends the note to Gemini along with the current list of workstream and teammate ids, and asks for structured JSON back (title, description, priority, due date, workstream, assignee). `app/routers/nl_task_router.py` then re-validates every id against the real lists before anything is shown, so a hallucinated workstream or assignee id is dropped rather than trusted.
+How it works: `app/gemini_client.py` sends the note to Gemini along with the current list of project and teammate ids, and asks for structured JSON back (title, description, priority, due date, project, assignee). `app/routers/nl_task_router.py` then re-validates every id against the real lists before anything is shown, so a hallucinated project or assignee id is dropped rather than trusted.
 
-Nothing is written to the database directly from the model. Every run lands on a review screen where each draft can be edited, unchecked, or reassigned, and workstream is required before the batch can be created. That review step is deliberate and shouldn't be optimised away: it's the thing that keeps a wrong guess from silently becoming a real task on someone's board.
+Nothing is written to the database directly from the model. Every run lands on a review screen where each draft can be edited, unchecked, or reassigned, and project is required before the batch can be created. That review step is deliberate and shouldn't be optimised away: it's the thing that keeps a wrong guess from silently becoming a real task on someone's board.
 
 ## Auth model
 
@@ -97,8 +101,8 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 
 ### "New task from text" (Gemini)
 
-- **Prompt text leaves our infrastructure.** Whatever gets typed into that box is sent to Google's Generative Language API, along with the names of every active workstream and every teammate. Client names, deadlines, and anything else pasted in go with it. That is the real cost of this feature, and it should be an explicit decision before this is used on client work, not a footnote.
-- **The model's guesses are guesses.** Workstream, assignee, priority, and due date are inferred, and it will get some of them wrong — particularly when a note mentions a client that maps to no workstream, or a name that isn't on the team. Invented ids are dropped server-side, an unrecognised assignee falls back to whoever is logged in, and an unmatched workstream comes back blank and has to be picked by hand. The review screen exists because of this; don't build a "create without reviewing" shortcut on top of it.
+- **Prompt text leaves our infrastructure.** Whatever gets typed into that box is sent to Google's Generative Language API, along with the name of every active project, the workstream each one sits in, and every teammate. Client names, deadlines, and anything else pasted in go with it. That is the real cost of this feature, and it should be an explicit decision before this is used on client work, not a footnote.
+- **The model's guesses are guesses.** Project, assignee, priority, and due date are inferred, and it will get some of them wrong — particularly when a note mentions a client that maps to no project, or a name that isn't on the team. Invented ids are dropped server-side, an unrecognised assignee falls back to whoever is logged in, and an unmatched project comes back blank and has to be picked by hand. The review screen exists because of this; don't build a "create without reviewing" shortcut on top of it.
 - **No key, no feature.** With `GEMINI_API_KEY` unset the modal returns a plain error instead of hiding itself, so people will find the entry point before they find out it isn't configured. Everything else in the app keeps working.
 - **One synchronous call, no retry.** The request blocks for up to 30 seconds with no streaming and no progress indicator, and a timeout or a transient API error surfaces as an error message the person has to resubmit from. Long notes producing many drafts are the slow case.
 - **No spend controls.** There's no rate limit, no per-user quota, and no cap on prompt length beyond the browser's — a pasted wall of text is sent as-is. Set budget alerts on the Google AI Studio key rather than relying on the app to restrain itself.
@@ -107,7 +111,7 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 ### Data and behaviour
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.
-- **Unarchiving a project is not an exact undo.** Archiving a project archives its workstreams and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the project was archived comes back out too. Rare, but surprising when it happens.
+- **Unarchiving a workstream is not an exact undo.** Archiving a workstream archives its projects and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the workstream was archived comes back out too. Rare, but surprising when it happens.
 - **`docs/llm-feature-proposal.md` describes a feature this version doesn't have.** It argues for the JS version's Workstream Pulse digest; the LLM feature actually built here is "New task from text". Read it as background on the decision, not as a description of the app.
 - **No comments/notifications** — same scope cut as the JS version, contained follow-ups rather than schema changes.
 

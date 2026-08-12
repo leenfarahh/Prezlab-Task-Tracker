@@ -5,8 +5,8 @@
       <button type="button" id="modal-close-new" class="icon-btn modal-close" aria-label="Close"
               hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">&times;</button>
     </div>
-    <input type="hidden" name="workstream_id" value="{{ workstream_id }}" />
-    <input type="hidden" name="active_project" value="{{ active_project }}" />
+    <input type="hidden" name="project_id" value="{{ project_id }}" />
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
 
     <input name="title" required placeholder="What needs to happen?" autofocus />
 

@@ -30,98 +30,117 @@ def archived_projects_partial(request: Request):
 
 
 @router.get("/partials/new-project-modal", response_class=HTMLResponse)
-def new_project_modal(request: Request, active_project: str = "all", active_workstream: str = "all"):
+def new_project_modal(request: Request, workstream_id: str):
     redirect = require_login(request)
     if redirect:
         return redirect
-    ctx = {"request": request, "active_project": active_project, "active_workstream": active_workstream}
-    return templates.TemplateResponse("partials/new_project_modal.html", ctx)
+    return templates.TemplateResponse(
+        "partials/new_project_modal.html",
+        {"request": request, "workstream_id": workstream_id},
+    )
 
 
 @router.post("/projects", response_class=HTMLResponse)
-def create_project(
-    request: Request,
-    name: str = Form(...),
-    active_project: str = Form("all"),
-    active_workstream: str = Form("all"),
-):
+def create_project(request: Request, name: str = Form(...), workstream_id: str = Form(...)):
     redirect = require_login(request)
     if redirect:
         return redirect
 
-    get_service_client().table("projects").insert({"name": name.strip()}).execute()
+    get_service_client().table("projects").insert(
+        {"name": name.strip(), "workstream_id": workstream_id}
+    ).execute()
 
     # oob-only response: closes the modal (empties #modal-root) and refreshes
     # the sidebar in place - same pattern as tasks_router._refreshed_fragments.
-    # The scope comes from the form rather than being hard-coded to "all"
-    # because the sidebar's "+" shortcut can now create a project from any
-    # view, and rendering the tree as "all" would move the active highlight
-    # off whatever the board is still displaying.
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(workstream_id)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
 @router.get("/partials/edit-project-modal", response_class=HTMLResponse)
-def edit_project_modal(request: Request, project_id: str, active_project: str = "all"):
+def edit_project_modal(
+    request: Request,
+    project_id: str,
+    active_workstream: str = "all",
+    active_project: str = "all",
+):
     redirect = require_login(request)
     if redirect:
         return redirect
-    project = get_service_client().table("projects").select("*").eq("id", project_id).single().execute().data
+    project = (
+        get_service_client().table("projects").select("*").eq("id", project_id).single().execute().data
+    )
     return templates.TemplateResponse(
         "partials/edit_project_modal.html",
-        {"request": request, "project": project, "active_project": active_project},
+        {
+            "request": request,
+            "project": project,
+            "active_workstream": active_workstream,
+            "active_project": active_project,
+        },
     )
 
 
 @router.get("/partials/confirm-archive-project-modal", response_class=HTMLResponse)
-def confirm_archive_project_modal(request: Request, project_id: str, active_project: str = "all"):
+def confirm_archive_project_modal(
+    request: Request,
+    project_id: str,
+    active_workstream: str = "all",
+    active_project: str = "all",
+):
     redirect = require_login(request)
     if redirect:
         return redirect
     ctx = {
         "request": request,
         "title": "Archive project",
-        "message": "Archive this project? It'll be hidden from the sidebar and board, and its workstreams and tasks will be archived along with it.",
+        "message": "Archive this project? It'll be hidden from the sidebar and board, and its tasks will be archived along with it.",
         "confirm_url": f"/projects/{project_id}/archive",
-        "confirm_vals": {"active_project": active_project},
+        "confirm_vals": {"active_workstream": active_workstream, "active_project": active_project},
         "confirm_label": "Archive",
     }
     return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
 
 
 @router.post("/projects/{project_id}", response_class=HTMLResponse)
-def update_project(request: Request, project_id: str, name: str = Form(...), active_project: str = Form("all")):
+def update_project(
+    request: Request,
+    project_id: str,
+    name: str = Form(...),
+    active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
 
     get_service_client().table("projects").update({"name": name.strip()}).eq("id", project_id).execute()
 
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream, active_project)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
 @router.post("/projects/{project_id}/archive", response_class=HTMLResponse)
-def archive_project(request: Request, project_id: str, active_project: str = Form("all")):
+def archive_project(
+    request: Request,
+    project_id: str,
+    active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
 
-    service = get_service_client()
-    service.table("projects").update({"is_archived": True}).eq("id", project_id).execute()
-    # A project disappearing from the board shouldn't leave its workstreams (and
-    # their tasks) dangling as live-but-orphaned - archive them as one unit.
-    workstream_ids = [w["id"] for w in service.table("workstreams").select("id").eq("project_id", project_id).execute().data]
-    service.table("workstreams").update({"is_archived": True}).eq("project_id", project_id).execute()
-    if workstream_ids:
-        service.table("tasks").update({"is_archived": True}).in_("workstream_id", workstream_ids).execute()
+    get_service_client().table("projects").update({"is_archived": True}).eq("id", project_id).execute()
+    # A project disappearing from the board shouldn't leave its tasks
+    # dangling as live-but-orphaned - archive them as one unit.
+    get_service_client().table("tasks").update({"is_archived": True}).eq("project_id", project_id).execute()
 
     if active_project == project_id:
-        # Its sidebar entry (and filter) is gone now - bounce to "all" instead
-        # of leaving the page pointed at an unreachable project filter.
-        return HTMLResponse("", headers={"HX-Redirect": "/?project=all"})
+        # Its board tab (and filter) is gone now - bounce to the workstream's
+        # "all projects" view instead of a now-unreachable project filter.
+        return HTMLResponse("", headers={"HX-Redirect": f"/?workstream={active_workstream}&project=all"})
 
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream, active_project)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
@@ -131,13 +150,9 @@ def unarchive_project(request: Request, project_id: str):
     if redirect:
         return redirect
 
-    service = get_service_client()
-    service.table("projects").update({"is_archived": False}).eq("id", project_id).execute()
-    # Mirrors archive_project: workstreams (and their tasks) that went into
-    # archive as part of the project come back out as part of it too.
-    workstream_ids = [w["id"] for w in service.table("workstreams").select("id").eq("project_id", project_id).execute().data]
-    service.table("workstreams").update({"is_archived": False}).eq("project_id", project_id).execute()
-    if workstream_ids:
-        service.table("tasks").update({"is_archived": False}).in_("workstream_id", workstream_ids).execute()
+    get_service_client().table("projects").update({"is_archived": False}).eq("id", project_id).execute()
+    # Mirrors archive_project: tasks that went into archive as part of the
+    # project come back out as part of it too.
+    get_service_client().table("tasks").update({"is_archived": False}).eq("project_id", project_id).execute()
 
     return HTMLResponse(_refreshed_archive_fragments(request))

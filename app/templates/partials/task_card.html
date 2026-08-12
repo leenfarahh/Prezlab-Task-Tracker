@@ -1,8 +1,8 @@
-{% macro task_card(task, assignee, priority_label, priority_color, active_project, active_workstream, flagged=False) -%}
+{% macro task_card(task, assignee, priority_label, priority_color, active_workstream, active_project, flagged=False) -%}
 <button class="task-card status-{{ task.status }} {{ 'flagged' if flagged else '' }}"
-        hx-get="/partials/task-detail-modal?task_id={{ task.id }}&project={{ active_project }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
-  {% if active_workstream in ("all", "archived", "by_user") and task.workstream_name %}
-  <p class="workstream-tag">{{ task.workstream_name }}</p>
+        hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}&project={{ active_project }}" hx-target="#modal-root" hx-swap="innerHTML">
+  {% if active_project in ("all", "archived", "by_user") and task.project_name %}
+  <p class="project-tag">{{ task.project_name }}</p>
   {% endif %}
   <p class="task-card-title">{{ task.title }}</p>
   <div class="task-card-meta">

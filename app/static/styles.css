@@ -132,7 +132,7 @@ html.sidebar-collapsed .sidebar-expand-btn { display: inline-flex; }
 .disclosure-arrow::before { content: "\203A"; }
 details[open] > summary .disclosure-arrow { transform: rotate(90deg); }
 
-.sidebar-workstreams { margin: 0 0 6px 14px; }
+.sidebar-projects { margin: 0 0 6px 14px; }
 .sidebar-item-sub { font-size: 13px; padding: 5px 8px; }
 .sidebar-tasks { margin: 0 0 4px 22px; }
 .sidebar-task {
@@ -327,7 +327,7 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 .task-card.status-in_review { background: var(--tint-in-review); }
 .task-card.status-done { background: var(--tint-done); }
 
-.workstream-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: var(--muted); }
+.project-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: var(--muted); }
 .task-card-title { font-size: 14px; font-weight: 500; line-height: 1.35; margin: 0; }
 .status-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; margin-top: 4px; }
 .task-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }

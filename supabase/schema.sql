@@ -1,5 +1,10 @@
 -- Prezlab AI Team Tracker: core schema
 -- Run this in the Supabase SQL editor (or via `supabase db push`) on a fresh project.
+--
+-- Hierarchy: Workstream -> Project -> Task/assignee. If this project last ran a
+-- revision of this file that nested it the other way round (Project ->
+-- Workstream -> Task), the guarded "Invert the hierarchy" block below migrates
+-- it in place without touching a row - see the note there.
 
 create extension if not exists "pgcrypto";
 
@@ -50,28 +55,24 @@ end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user();
 
--- ---------- Projects ----------
--- Top-level grouping above workstreams: Project -> Workstream -> Task/assignee.
--- A workstream's old "client_label" (a plain string, shown in the UI as
--- "Project name") is exactly what this formalizes into a real entity.
+-- ---------- Workstreams ----------
+-- Top-level grouping: a standing area of work (a client, a product, an internal
+-- track) that individual projects are opened and closed inside of.
 
-create table if not exists public.projects (
+create table if not exists public.workstreams (
   id uuid primary key default gen_random_uuid(),
   name text not null, -- generic label only, e.g. "Client A" - never a real client name (see confidentiality note in README)
-  owner_id uuid references public.profiles (id),
   is_archived boolean not null default false,
   created_at timestamptz not null default now()
 );
 
-create index if not exists projects_is_archived_idx on public.projects (is_archived);
+-- ---------- Projects ----------
+-- A single piece of delivery inside a workstream, and the level tasks attach to.
 
--- ---------- Workstreams ----------
-
-create table if not exists public.workstreams (
+create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  project_id uuid not null references public.projects (id),
-  owner_id uuid references public.profiles (id),
+  workstream_id uuid not null references public.workstreams (id),
   color text not null default '#4C5FD5',
   is_archived boolean not null default false,
   created_at timestamptz not null default now()
@@ -81,7 +82,7 @@ create table if not exists public.workstreams (
 
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
-  workstream_id uuid not null references public.workstreams (id) on delete cascade,
+  project_id uuid not null references public.projects (id) on delete cascade,
   title text not null,
   description text,
   status task_status not null default 'backlog',
@@ -93,9 +94,71 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists tasks_workstream_idx on public.tasks (workstream_id);
+alter table public.tasks add column if not exists is_archived boolean not null default false;
+
+-- ---------- Invert the hierarchy: Project -> Workstream becomes Workstream -> Project ----------
+-- Only fires on a project that ran an earlier revision of this file, where
+-- workstreams sat *under* projects and tasks hung off workstreams. Guarded on
+-- that old parent column still existing, so it is a no-op on a fresh project
+-- and safe to re-run.
+--
+-- A foreign key follows the physical table through a rename, so swapping the
+-- two table names and then the two child columns inverts the hierarchy without
+-- rewriting a single row: what used to be a top-level project is now a
+-- workstream, each workstream it contained is now one of that workstream's
+-- projects, and every task stays attached to the same node it was already on.
+--
+-- Installs predating the project/workstream split entirely (a `client_label`
+-- column on workstreams and no projects table) are no longer handled here -
+-- run the previous revision of this file first, then this one.
+
+do $$
+begin
+  if exists (
+    select 1 from pg_attribute
+    where attrelid = to_regclass('public.workstreams')
+      and attname = 'project_id'
+      and not attisdropped
+  ) then
+    alter table public.projects rename to hierarchy_swap_tmp;
+    alter table public.workstreams rename to projects;
+    alter table public.hierarchy_swap_tmp rename to workstreams;
+
+    alter table public.projects rename column project_id to workstream_id;
+    alter table public.tasks rename column workstream_id to project_id;
+
+    -- Indexes and constraints followed their tables through the rename, so their
+    -- names now describe the wrong level. Nothing depends on those names, but
+    -- leaving them would both mislead anyone reading `\d` and let the
+    -- `create index if not exists` statements below add a second index over a
+    -- column that is already indexed under the old name.
+    alter index if exists public.projects_is_archived_idx rename to workstreams_is_archived_idx;
+    alter index if exists public.workstreams_project_idx rename to projects_workstream_idx;
+    alter index if exists public.tasks_workstream_idx rename to tasks_project_idx;
+
+    -- Renaming an index renames the constraint it backs, so the two primary
+    -- keys have to pass through a free name rather than swapping directly.
+    alter index if exists public.projects_pkey rename to hierarchy_swap_pkey;
+    alter index if exists public.workstreams_pkey rename to projects_pkey;
+    alter index if exists public.hierarchy_swap_pkey rename to workstreams_pkey;
+
+    if exists (select 1 from pg_constraint where conname = 'workstreams_project_id_fkey') then
+      alter table public.projects rename constraint workstreams_project_id_fkey to projects_workstream_id_fkey;
+    end if;
+    if exists (select 1 from pg_constraint where conname = 'tasks_workstream_id_fkey') then
+      alter table public.tasks rename constraint tasks_workstream_id_fkey to tasks_project_id_fkey;
+    end if;
+  end if;
+end $$;
+
+-- ---------- Indexes ----------
+
+create index if not exists workstreams_is_archived_idx on public.workstreams (is_archived);
+create index if not exists projects_workstream_idx on public.projects (workstream_id);
+create index if not exists tasks_project_idx on public.tasks (project_id);
 create index if not exists tasks_status_idx on public.tasks (status);
 create index if not exists tasks_assignee_idx on public.tasks (assignee_id);
+create index if not exists tasks_is_archived_idx on public.tasks (is_archived);
 
 create or replace function public.set_updated_at()
 returns trigger as $$
@@ -178,10 +241,24 @@ drop policy if exists "auth_tokens no client access" on public.auth_tokens;
 create policy "auth_tokens no client access" on public.auth_tokens
   for all using (false) with check (false);
 
+-- ---------- Dropped columns from earlier revisions ----------
+-- All no-ops on a fresh project. Named on both tables because the swap above
+-- means either name could be holding a column an older revision put on the
+-- other one.
+
+alter table public.workstreams drop column if exists product_id;
+alter table public.projects drop column if exists product_id;
+drop table if exists public.products;
+
+-- Workstreams and projects are editable by any allow-listed user, not just a
+-- designated owner - only tasks are restricted to their creator/assignee.
+alter table public.workstreams drop column if exists owner_id;
+alter table public.projects drop column if exists owner_id;
+
 -- ---------- Row Level Security ----------
 -- Internal team tool: any authenticated team member can read/write everything.
--- This is intentionally simple (no per-workstream ACLs yet) - see README for how to
--- tighten this if the tool grows past a single internal team.
+-- This is intentionally simple (no per-workstream ACLs yet) - see README for how
+-- to tighten this if the tool grows past a single internal team.
 --
 -- Note: since login no longer goes through Supabase Auth (see People, above),
 -- auth.role() here never actually evaluates to 'authenticated' for any request -
@@ -191,8 +268,8 @@ create policy "auth_tokens no client access" on public.auth_tokens
 -- require_login, not here.
 
 alter table public.profiles enable row level security;
-alter table public.projects enable row level security;
 alter table public.workstreams enable row level security;
+alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_activity enable row level security;
 
@@ -203,12 +280,17 @@ drop policy if exists "profiles updatable by owner" on public.profiles;
 create policy "profiles updatable by owner" on public.profiles
   for update using (auth.uid() = id);
 
-drop policy if exists "projects full access for authenticated users" on public.projects;
-create policy "projects full access for authenticated users" on public.projects
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-
+-- A policy's name travelled with its table through the swap above, so each of
+-- these two tables can be holding the other's policy - drop both names on both
+-- before recreating, or the stale one lingers alongside the new one.
 drop policy if exists "workstreams full access for authenticated users" on public.workstreams;
+drop policy if exists "workstreams full access for authenticated users" on public.projects;
+drop policy if exists "projects full access for authenticated users" on public.workstreams;
+drop policy if exists "projects full access for authenticated users" on public.projects;
+
 create policy "workstreams full access for authenticated users" on public.workstreams
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "projects full access for authenticated users" on public.projects
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 drop policy if exists "tasks full access for authenticated users" on public.tasks;
@@ -243,59 +325,6 @@ begin
     alter publication supabase_realtime add table public.task_activity;
   end if;
 end $$;
-
-alter table public.workstreams drop column if exists product_id;
-alter table public.workstreams add column if not exists client_label text;
-
--- Projects and workstreams are editable by any allow-listed user, not just a
--- designated owner - only tasks are restricted to their creator/assignee.
-alter table public.projects drop column if exists owner_id;
-alter table public.workstreams drop column if exists owner_id;
-drop table if exists public.products;
-
--- feature, so nothing reads or writes it. Left in place rather than dropped
--- automatically, because the JS version does use it and may be pointed at the
--- same Supabase project. Uncomment only once you've confirmed it isn't:
-
-alter table public.tasks add column if not exists is_archived boolean not null default false;
-create index if not exists tasks_is_archived_idx on public.tasks (is_archived);
-
--- ---------- Migrate workstreams under Project -> Workstream ----------
--- Backfills a Project for every pre-existing workstream, reusing its old
--- client_label as the project name (workstreams sharing a label merge into
--- one project; label-less workstreams land in a shared "Unsorted" project),
--- then drops the now-redundant client_label column. Every step is guarded,
--- so this is safe to re-run once already applied.
-
-alter table public.workstreams add column if not exists project_id uuid references public.projects (id);
-
-do $$
-declare
-  ws_label record;
-  new_project_id uuid;
-begin
-  if exists (select 1 from public.workstreams where project_id is null) then
-    for ws_label in
-      select distinct coalesce(client_label, '') as label
-      from public.workstreams
-      where project_id is null
-    loop
-      insert into public.projects (name)
-      values (case when ws_label.label = '' then 'Unsorted' else ws_label.label end)
-      returning id into new_project_id;
-
-      update public.workstreams
-      set project_id = new_project_id
-      where project_id is null
-        and coalesce(client_label, '') = ws_label.label;
-    end loop;
-  end if;
-end $$;
-
-alter table public.workstreams alter column project_id set not null;
-alter table public.workstreams drop column if exists client_label;
-
-create index if not exists workstreams_project_idx on public.workstreams (project_id);
 
 -- ---------- Avatar storage ----------
 -- Public bucket for profile photos (see app/routers/user_router.py). Public

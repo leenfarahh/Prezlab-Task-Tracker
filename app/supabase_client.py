@@ -12,7 +12,7 @@ bypasses RLS entirely at the database level.
 
 This is a safe trade-off ONLY because the RLS policies in schema.sql already
 grant any authenticated user full read/write access - the app-level check and
-the database-level policy currently express the same rule. If per-workstream
+the database-level policy currently express the same rule. If per-project
 or per-role access control is added later, that logic has to live here, in
 the FastAPI routes, since the database will no longer be doing that
 enforcement for this client.

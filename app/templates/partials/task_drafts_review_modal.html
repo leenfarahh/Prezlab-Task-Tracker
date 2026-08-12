@@ -1,8 +1,8 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-drafts', 'click')">
   <form class="modal-card" style="max-width: 640px; max-height: 85vh; overflow-y: auto;" hx-post="/tasks/batch" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">Review {{ drafts|length }} draft task{{ 's' if drafts|length != 1 else '' }}</p>
-    <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
 
     {% if not drafts %}
     <p style="font-size: 14px; color: var(--muted);">Nothing came out of that prompt - try describing the work more specifically.</p>
@@ -35,12 +35,12 @@
           <option value="{{ p.id }}" {{ 'selected' if p.id == draft.assignee_id else '' }}>{{ p.full_name }}</option>
           {% endfor %}
         </select>
-        <select name="workstream_id_{{ loop.index0 }}" required>
-          <option value="" {{ 'selected' if not draft.workstream_id else '' }} disabled>Pick a workstream…</option>
-          {% for project_name, group in workstreams|sort(attribute='project_name')|groupby('project_name') %}
-          <optgroup label="{{ project_name }}">
-            {% for w in group %}
-            <option value="{{ w.id }}" {{ 'selected' if w.id == draft.workstream_id else '' }}>{{ w.name }}</option>
+        <select name="project_id_{{ loop.index0 }}" required>
+          <option value="" {{ 'selected' if not draft.project_id else '' }} disabled>Pick a project…</option>
+          {% for workstream_name, group in projects|sort(attribute='workstream_name')|groupby('workstream_name') %}
+          <optgroup label="{{ workstream_name }}">
+            {% for p in group %}
+            <option value="{{ p.id }}" {{ 'selected' if p.id == draft.project_id else '' }}>{{ p.name }}</option>
             {% endfor %}
           </optgroup>
           {% endfor %}

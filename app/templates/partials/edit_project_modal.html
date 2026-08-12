@@ -1,13 +1,14 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-edit-project', 'click')">
   <form class="modal-card" hx-post="/projects/{{ project.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">Edit project</p>
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
     <input type="hidden" name="active_project" value="{{ active_project }}" />
 
     <input name="name" required placeholder="Project name" value="{{ project.name }}" autofocus />
 
     <div class="modal-actions" style="justify-content: space-between;">
       <button type="button" class="link-muted" style="color: var(--blocked);"
-              hx-get="/partials/confirm-archive-project-modal?project_id={{ project.id }}&active_project={{ active_project }}"
+              hx-get="/partials/confirm-archive-project-modal?project_id={{ project.id }}&active_workstream={{ active_workstream }}&active_project={{ active_project }}"
               hx-target="#modal-root" hx-swap="innerHTML">
         Archive
       </button>

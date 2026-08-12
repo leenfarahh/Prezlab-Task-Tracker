@@ -8,11 +8,12 @@
     <h1>Archived projects</h1>
   </div>
 
-  {% for p in archived_projects %}
+  {% for p in projects %}
   <div class="task-card" style="display: flex; align-items: center; justify-content: space-between; cursor: default; max-width: 420px;">
     <div>
+      <p class="project-tag">{{ p.workstream_name }}</p>
       <p class="task-card-title">{{ p.name }}</p>
-      <p class="task-card-meta">{{ p.archived_workstream_count }} archived workstream{{ '' if p.archived_workstream_count == 1 else 's' }}</p>
+      <p class="task-card-meta">{{ p.archived_task_count }} archived task{{ '' if p.archived_task_count == 1 else 's' }}</p>
     </div>
     <button type="button" class="btn-ghost"
             hx-post="/projects/{{ p.id }}/unarchive"

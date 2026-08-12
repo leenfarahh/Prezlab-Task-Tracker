@@ -31,7 +31,7 @@ PRIORITY_COLOR = {
 
 
 def health_strip_segments(tasks: list[dict]) -> list[dict]:
-    """Proportional status segments for a workstream's health strip."""
+    """Proportional status segments for a health strip (a workstream's, or a person's)."""
     if not tasks:
         return []
     total = len(tasks)

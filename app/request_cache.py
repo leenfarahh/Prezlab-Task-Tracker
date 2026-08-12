@@ -2,7 +2,7 @@
 
 Rendering one page asks for the same tables several times over - the sidebar
 context and the board context each build their own view of
-projects/workstreams/tasks - so a dashboard load was issuing 8 queries to read
+workstreams/projects/tasks - so a dashboard load was issuing 8 queries to read
 4 distinct things. Every one of those is a separate HTTPS round trip, and with
 payloads this small the wait is almost entirely network, so the repeats were
 pure latency.

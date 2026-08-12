@@ -50,45 +50,45 @@ def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
 
 
 def _archived_parent_denial(request: Request, task_id: str) -> HTMLResponse | None:
-    """Returns a denial response if this task's workstream (or its project) is
+    """Returns a denial response if this task's project (or its workstream) is
     still archived, else None.
 
-    Archiving cascades downward - archiving a workstream or project archives
+    Archiving cascades downward - archiving a project or workstream archives
     everything under it - but restoring a single task has no matching cascade
     upward, and letting one through would strand a live task inside an archived
-    parent. Those tasks resolve to no workstream and no project, so the board
+    parent. Those tasks resolve to no project and no workstream, so the board
     filters them out of existence entirely (build_board_context) while the team
     and profile pages render them as "Unknown - Unknown" with a dead link.
     Restore the parent instead; its own cascade brings the tasks back with it.
     """
     service = get_service_client()
     task = fetch_task(task_id)  # already cached by _guard on the write paths
-    workstream = (
-        service.table("workstreams")
-        .select("name, project_id, is_archived")
-        .eq("id", task["workstream_id"])
+    project = (
+        service.table("projects")
+        .select("name, workstream_id, is_archived")
+        .eq("id", task["project_id"])
         .single()
         .execute()
         .data
     )
-    project = (
-        service.table("projects")
+    workstream = (
+        service.table("workstreams")
         .select("name, is_archived")
-        .eq("id", workstream["project_id"])
+        .eq("id", project["workstream_id"])
         .single()
         .execute()
         .data
     )
 
-    if workstream["is_archived"]:
-        message = (
-            f"This task's workstream ({workstream['name']}) is archived. "
-            "Unarchive the workstream instead - its tasks come back with it."
-        )
-    elif project["is_archived"]:
+    if project["is_archived"]:
         message = (
             f"This task's project ({project['name']}) is archived. "
-            "Unarchive the project instead - its workstreams and tasks come back with it."
+            "Unarchive the project instead - its tasks come back with it."
+        )
+    elif workstream["is_archived"]:
+        message = (
+            f"This task's workstream ({workstream['name']}) is archived. "
+            "Unarchive the workstream instead - its projects and tasks come back with it."
         )
     else:
         return None
@@ -103,8 +103,8 @@ def _archived_parent_denial(request: Request, task_id: str) -> HTMLResponse | No
 @router.post("/tasks", response_class=HTMLResponse)
 def create_task(
     request: Request,
-    workstream_id: str = Form(...),
-    active_project: str = Form("all"),
+    project_id: str = Form(...),
+    active_workstream: str = Form("all"),
     title: str = Form(...),
     priority: str = Form("medium"),
     assignee_id: str = Form(""),
@@ -117,7 +117,7 @@ def create_task(
 
     get_service_client().table("tasks").insert(
         {
-            "workstream_id": workstream_id,
+            "project_id": project_id,
             "title": title.strip(),
             "priority": priority,
             "assignee_id": assignee_id or None,
@@ -126,7 +126,7 @@ def create_task(
         }
     ).execute()
 
-    return HTMLResponse(refreshed_fragments(request, active_project, workstream_id))
+    return HTMLResponse(refreshed_fragments(request, active_workstream, project_id))
 
 
 @router.post("/tasks/{task_id}", response_class=HTMLResponse)
@@ -138,8 +138,8 @@ def update_task(
     priority: str = Form(...),
     assignee_id: str = Form(""),
     due_date: str = Form(""),
-    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
 ):
     denial = _guard(request, task_id)
     if denial:
@@ -155,15 +155,15 @@ def update_task(
         }
     ).eq("id", task_id).execute()
 
-    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
 
 @router.get("/partials/confirm-delete-task-modal", response_class=HTMLResponse)
 def confirm_delete_task_modal(
     request: Request,
     task_id: str,
-    active_project: str = "all",
     active_workstream: str = "all",
+    active_project: str = "all",
 ):
     redirect = require_login(request)
     if redirect:
@@ -173,7 +173,7 @@ def confirm_delete_task_modal(
         "title": "Delete task",
         "message": "Delete this task? This can't be undone.",
         "confirm_url": f"/tasks/{task_id}/delete",
-        "confirm_vals": {"active_project": active_project, "active_workstream": active_workstream},
+        "confirm_vals": {"active_workstream": active_workstream, "active_project": active_project},
         "confirm_label": "Delete",
     }
     return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
@@ -183,8 +183,8 @@ def confirm_delete_task_modal(
 def archive_task(
     request: Request,
     task_id: str,
-    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
 ):
     denial = _guard(request, task_id)
     if denial:
@@ -192,15 +192,15 @@ def archive_task(
 
     get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
 
-    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
 
 @router.post("/tasks/{task_id}/unarchive", response_class=HTMLResponse)
 def unarchive_task(
     request: Request,
     task_id: str,
-    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
 ):
     denial = _guard(request, task_id)
     if denial:
@@ -211,15 +211,15 @@ def unarchive_task(
 
     get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
 
-    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
 
 @router.post("/tasks/{task_id}/delete", response_class=HTMLResponse)
 def delete_task(
     request: Request,
     task_id: str,
-    active_project: str = Form("all"),
     active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
 ):
     denial = _guard(request, task_id)
     if denial:
@@ -227,4 +227,4 @@ def delete_task(
 
     get_service_client().table("tasks").delete().eq("id", task_id).execute()
 
-    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))

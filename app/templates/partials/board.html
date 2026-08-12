@@ -10,48 +10,48 @@
    refresh after a create/edit/archive morphs instead of replacing outright. #}
 <section class="board-section" id="board-container"
          {% if oob %}hx-swap-oob="morph"{% endif %}
-         hx-get="/partials/board?project={{ active_project }}&workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="morph">
-  {% if active_project != "archived" %}
+         hx-get="/partials/board?workstream={{ active_workstream }}&project={{ active_project }}" hx-trigger="every 5s" hx-swap="morph">
+  {% if active_workstream != "archived" %}
   <div class="board-topbar">
-    {% if scoped_project %}
+    {% if scoped_workstream %}
     <div class="subtab-strip">
-      <a href="/?project={{ scoped_project.id }}&workstream=all" class="tab {{ 'active' if active_workstream == 'all' else '' }}">All</a>
-      {% for ws in tab_workstreams %}
-      <a href="/?project={{ scoped_project.id }}&workstream={{ ws.id }}" class="tab {{ 'active' if active_workstream == ws.id else '' }}">{{ ws.name }}</a>
+      <a href="/?workstream={{ scoped_workstream.id }}&project=all" class="tab {{ 'active' if active_project == 'all' else '' }}">All</a>
+      {% for p in tab_projects %}
+      <a href="/?workstream={{ scoped_workstream.id }}&project={{ p.id }}" class="tab {{ 'active' if active_project == p.id else '' }}">{{ p.name }}</a>
       {% endfor %}
-      <a href="/?project={{ scoped_project.id }}&workstream=by_user" class="tab {{ 'active' if active_workstream == 'by_user' else '' }}">By user</a>
+      <a href="/?workstream={{ scoped_workstream.id }}&project=by_user" class="tab {{ 'active' if active_project == 'by_user' else '' }}">By user</a>
     </div>
     {% else %}
     <div class="tab-strip">
-      <a href="/?project=all" class="tab {{ 'active' if active_project == 'all' else '' }}">All</a>
-      {% for p in tab_projects %}
-      <a href="/?project={{ p.id }}" class="tab {{ 'active' if active_project == p.id else '' }}">{{ p.name }}</a>
+      <a href="/?workstream=all" class="tab {{ 'active' if active_workstream == 'all' else '' }}">All</a>
+      {% for w in tab_workstreams %}
+      <a href="/?workstream={{ w.id }}" class="tab {{ 'active' if active_workstream == w.id else '' }}">{{ w.name }}</a>
       {% endfor %}
     </div>
     {% endif %}
 
     <div class="topbar-actions">
-      {% if show_new_project %}
+      {% if show_new_workstream %}
       <button class="btn-primary"
-              hx-get="/partials/new-project-modal"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        + New project
-      </button>
-      {% elif show_new_workstream %}
-      <button class="btn-primary"
-              hx-get="/partials/new-workstream-modal?project_id={{ scoped_project.id }}"
+              hx-get="/partials/new-workstream-modal"
               hx-target="#modal-root" hx-swap="innerHTML">
         + New workstream
       </button>
+      {% elif show_new_project %}
+      <button class="btn-primary"
+              hx-get="/partials/new-project-modal?workstream_id={{ scoped_workstream.id }}"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        + New project
+      </button>
       {% elif show_new_task %}
       <button class="btn-primary"
-              hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}&active_project={{ active_project }}"
+              hx-get="/partials/new-task-modal?project_id={{ active_project }}&active_workstream={{ active_workstream }}"
               hx-target="#modal-root" hx-swap="innerHTML">
         + New task
       </button>
       {% endif %}
       <button class="btn-ghost"
-              hx-get="/partials/new-task-text-modal?active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+              hx-get="/partials/new-task-text-modal?active_workstream={{ active_workstream }}&active_project={{ active_project }}"
               hx-target="#modal-root" hx-swap="innerHTML">
         + New task from text
       </button>
@@ -59,12 +59,12 @@
   </div>
   {% endif %}
 
-  {% if scoped_project or active_project == "archived" %}
+  {% if scoped_workstream or active_workstream == "archived" %}
   <div class="board-header">
     <h1>{{ board_title }}</h1>
-    {% if scoped_workstream %}
+    {% if scoped_project %}
     <button type="button" class="link-muted"
-            hx-get="/partials/edit-workstream-modal?workstream_id={{ scoped_workstream.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+            hx-get="/partials/edit-project-modal?project_id={{ scoped_project.id }}&active_workstream={{ active_workstream }}&active_project={{ active_project }}"
             hx-target="#modal-root" hx-swap="innerHTML">
       Edit
     </button>
@@ -72,18 +72,18 @@
   </div>
   {% endif %}
 
-  {% if project_overview %}
+  {% if workstream_overview %}
   <div class="ws-overview">
     <div class="ws-overview-item">
-      <span class="ws-overview-label">Workstreams</span>
-      <span class="ws-overview-value">{{ project_overview.workstream_count }}</span>
+      <span class="ws-overview-label">Projects</span>
+      <span class="ws-overview-value">{{ workstream_overview.project_count }}</span>
     </div>
     <div class="ws-overview-item">
       <span class="ws-overview-label">Tasks</span>
-      <span class="ws-overview-value">{{ project_overview.done_count }} / {{ project_overview.total_tasks }} done</span>
+      <span class="ws-overview-value">{{ workstream_overview.done_count }} / {{ workstream_overview.total_tasks }} done</span>
     </div>
     <div class="ws-overview-strip">
-      {{ hs.health_strip(project_overview.segments) }}
+      {{ hs.health_strip(workstream_overview.segments) }}
     </div>
   </div>
   {% endif %}
@@ -105,7 +105,7 @@
   </div>
   {% endif %}
 
-  {% if active_workstream == "by_user" and scoped_project %}
+  {% if active_project == "by_user" and scoped_workstream %}
   <div class="board-grid" style="grid-template-columns: repeat({{ by_user_columns | length if by_user_columns else 1 }}, 1fr);">
     {% for col in by_user_columns %}
     <div class="board-column">
@@ -114,7 +114,7 @@
         <span class="column-count">{{ col.tasks | length }}</span>
       </p>
       {% for task in col.tasks %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids) }}
       {% endfor %}
     </div>
     {% else %}
@@ -132,7 +132,7 @@
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids) }}
       {% else %}
         <p class="empty-column">Nothing here.</p>
       {% endfor %}

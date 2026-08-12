@@ -1,8 +1,8 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new-text', 'click')">
   <form class="modal-card" hx-post="/tasks/parse" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
     <p class="eyebrow" style="margin-bottom: 12px;">New task from text</p>
-    <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
 
     {% if error %}
     <p style="margin: 0 0 10px; font-size: 13px; color: var(--blocked);">{{ error }}</p>

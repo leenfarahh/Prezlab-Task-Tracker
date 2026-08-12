@@ -7,7 +7,7 @@ from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATU
 templates = Jinja2Templates(directory="app/templates")
 
 
-def refreshed_fragments(request: Request, active_project: str, active_workstream: str) -> str:
+def refreshed_fragments(request: Request, active_workstream: str, active_project: str) -> str:
     """Renders board + sidebar as out-of-band swaps, closing the modal in the process."""
     board_ctx = {
         "request": request,
@@ -17,9 +17,9 @@ def refreshed_fragments(request: Request, active_project: str, active_workstream
         "priority_label": PRIORITY_LABEL,
         "priority_color": PRIORITY_COLOR,
         "oob": True,
-        **build_board_context(active_project, active_workstream),
+        **build_board_context(active_workstream, active_project),
     }
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream, active_project)}
 
     board_html = templates.get_template("partials/board.html").render(board_ctx)
     sidebar_html = templates.get_template("partials/sidebar.html").render(sidebar_ctx)

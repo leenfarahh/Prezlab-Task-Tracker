@@ -71,8 +71,8 @@
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-      <a href="/?project={{ task.project_id }}&workstream={{ task.workstream_id }}" class="task-card status-{{ task.status }}">
-        <p class="workstream-tag">{{ task.project_name }} · {{ task.workstream_name }}</p>
+      <a href="/?workstream={{ task.workstream_id }}&project={{ task.project_id }}" class="task-card status-{{ task.status }}">
+        <p class="project-tag">{{ task.workstream_name }} · {{ task.project_name }}</p>
         <p class="task-card-title">{{ task.title }}</p>
         {% if task.due_date_display %}
         <div class="task-card-meta">
