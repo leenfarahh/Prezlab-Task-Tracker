@@ -15,9 +15,21 @@
   <a href="/team"     class="sidebar-item {{ 'active' if active_project == 'team' else '' }}">
     Team
   </a>
-  <a href="/?project=all"     class="sidebar-item {{ 'active' if active_project == 'all' else '' }}">
-    All projects
-  </a>
+  <div class="sidebar-row {{ 'active' if active_project == 'all' else '' }}" style="margin-bottom: 0;">
+    <a href="/?project=all" class="sidebar-item {{ 'active' if active_project == 'all' else '' }}" style="flex: 1;">
+      All projects
+    </a>
+    {# Shortcut to the same modal the board topbar opens. That topbar button only
+       renders on the All projects view (show_new_project in build_board_context),
+       so without this you had to navigate there first just to add a project. The
+       current scope rides along so the refresh after create doesn't yank the
+       sidebar over to "all" while the board is still showing a project. #}
+    <button type="button" class="link-muted" style="padding: 4px 8px; font-size: 16px; line-height: 1; flex-shrink: 0;"
+            hx-get="/partials/new-project-modal?active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+            hx-target="#modal-root" hx-swap="innerHTML" title="New project">
+      +
+    </button>
+  </div>
 
   <div style="margin-top: 8px;">
     {% for p in projects %}

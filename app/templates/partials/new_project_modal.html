@@ -3,6 +3,10 @@
     <p class="eyebrow" style="margin-bottom: 12px;">New project</p>
 
     <input name="name" required placeholder="Project name" autofocus />
+    {# Carried through so the sidebar refresh keeps the view the user opened
+       this from - see create_project in app/routers/project_router.py. #}
+    <input type="hidden" name="active_project" value="{{ active_project | default('all') }}" />
+    <input type="hidden" name="active_workstream" value="{{ active_workstream | default('all') }}" />
 
     <div class="modal-actions">
       <button type="button" id="modal-close-new-project" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>

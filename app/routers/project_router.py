@@ -30,15 +30,21 @@ def archived_projects_partial(request: Request):
 
 
 @router.get("/partials/new-project-modal", response_class=HTMLResponse)
-def new_project_modal(request: Request):
+def new_project_modal(request: Request, active_project: str = "all", active_workstream: str = "all"):
     redirect = require_login(request)
     if redirect:
         return redirect
-    return templates.TemplateResponse("partials/new_project_modal.html", {"request": request})
+    ctx = {"request": request, "active_project": active_project, "active_workstream": active_workstream}
+    return templates.TemplateResponse("partials/new_project_modal.html", ctx)
 
 
 @router.post("/projects", response_class=HTMLResponse)
-def create_project(request: Request, name: str = Form(...)):
+def create_project(
+    request: Request,
+    name: str = Form(...),
+    active_project: str = Form("all"),
+    active_workstream: str = Form("all"),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -47,7 +53,11 @@ def create_project(request: Request, name: str = Form(...)):
 
     # oob-only response: closes the modal (empties #modal-root) and refreshes
     # the sidebar in place - same pattern as tasks_router._refreshed_fragments.
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context("all")}
+    # The scope comes from the form rather than being hard-coded to "all"
+    # because the sidebar's "+" shortcut can now create a project from any
+    # view, and rendering the tree as "all" would move the active highlight
+    # off whatever the board is still displaying.
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
 
 
