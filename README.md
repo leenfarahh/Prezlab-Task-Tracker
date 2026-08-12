@@ -1,4 +1,4 @@
-# Pulse (Python version) — Prezlab AI Team task tracker
+# Prezlab AI Team task tracker
 
 Same product as the Next.js/React version, rebuilt on a Python backend: FastAPI + Jinja2 + HTMX instead of Next.js/React, same Supabase schema underneath.
 
