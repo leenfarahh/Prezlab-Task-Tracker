@@ -9,8 +9,9 @@ from app.data import (
     build_board_context,
     build_sidebar_context,
     fetch_profiles,
+    fetch_task,
+    prefetch,
 )
-from app.supabase_client import get_service_client
 from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
 router = APIRouter()
@@ -31,6 +32,7 @@ def dashboard(request: Request, project: str = "all", workstream: str = "all"):
         "status_color": STATUS_COLOR,
         "priority_label": PRIORITY_LABEL,
         "priority_color": PRIORITY_COLOR,
+        "viewer": fetch_profiles().get(current_user(request)["id"]),
         **build_sidebar_context(project, workstream),
         **build_board_context(project, workstream),
     }
@@ -52,6 +54,7 @@ def archived_workstreams_page(request: Request):
     ctx = {
         "request": request,
         "board_template": "partials/archived_workstreams.html",
+        "viewer": fetch_profiles().get(current_user(request)["id"]),
         **build_sidebar_context("archived_workstreams"),
         **build_archived_workstreams_context(),
     }
@@ -68,6 +71,7 @@ def archived_projects_page(request: Request):
     ctx = {
         "request": request,
         "board_template": "partials/archived_projects.html",
+        "viewer": fetch_profiles().get(current_user(request)["id"]),
         **build_sidebar_context("archived_projects"),
         **build_archived_projects_context(),
     }
@@ -124,10 +128,18 @@ def new_task_modal(request: Request, workstream_id: str, active_project: str = "
 
 @router.get("/partials/task-detail-modal", response_class=HTMLResponse)
 def task_detail_modal(request: Request, task_id: str, project: str = "all", workstream: str = "all"):
+    # Clicking a task card is the most-used interaction in the app, and it used
+    # to wait on two round trips back to back: require_login's profile check,
+    # then the task row. Neither depends on the other, so they go together.
+    # Gated on there being a session at all (a cookie read, no I/O), so an
+    # anonymous request still does zero database work before being redirected.
+    if current_user(request):
+        prefetch(fetch_profiles, lambda: fetch_task(task_id))
+
     redirect = require_login(request)
     if redirect:
         return redirect
-    task = get_service_client().table("tasks").select("*").eq("id", task_id).single().execute().data
+    task = fetch_task(task_id)
     ctx = {
         "request": request,
         "task": task,

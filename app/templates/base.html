@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Team Task Tracker</title>
-  <link rel="icon" href="/static/logo.png" />
+  <link rel="icon" href="/static/logo_short.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -62,6 +62,21 @@
       });
     }
     document.addEventListener('htmx:load', syncSidebarDisclosures);
+
+    // <details> stays open until it's toggled again, so close the modal
+    // overflow menu when the click lands anywhere outside it.
+    //
+    // Registered on the CAPTURE phase deliberately. .modal-card carries
+    // onclick="event.stopPropagation()" (it stops backdrop-click-to-close from
+    // firing on clicks inside the dialog), so a normal bubble-phase listener
+    // here never sees clicks landing anywhere in the modal - which is exactly
+    // the case this needs to catch. Capture runs document-down, before the
+    // event reaches .modal-card, so stopPropagation can't hide it.
+    document.addEventListener('click', function (e) {
+      document.querySelectorAll('details.modal-menu[open]').forEach(function (menu) {
+        if (!menu.contains(e.target)) menu.open = false;
+      });
+    }, true);
   </script>
 </head>
 <body hx-ext="morph">

@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import SESSION_SECRET
+from app.request_cache import RequestCacheMiddleware
 from app.routers import (
     auth_router,
     board_router,
@@ -21,6 +22,10 @@ templates = Jinja2Templates(directory="app/templates")
 # Signed session cookie carrying {id, email, full_name} only - see app/supabase_client.py
 # for the reasoning on why this app does not carry raw Supabase JWTs around per-request.
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, https_only=False, same_site="lax")
+
+# Gives each request its own fetch cache, so the sidebar and board contexts
+# stop re-reading the same tables from Supabase within a single render.
+app.add_middleware(RequestCacheMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

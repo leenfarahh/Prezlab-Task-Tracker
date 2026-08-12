@@ -14,6 +14,15 @@
   --in-review: #6f52b5;
   --done: #7a8391;
   --signal: #002528;
+  /* Pastel wash of each status hue above, used as the task-card background.
+     The saturated versions stay in place for small elements (health strip,
+     sidebar dots, priority pills) where a tint would be too faint to read. */
+  --tint-backlog: #e9ebee;
+  --tint-in-progress: #d5e4e5;
+  --tint-at-risk: #f8e8cd;
+  --tint-blocked: #f8dcdc;
+  --tint-in-review: #e6dff5;
+  --tint-done: #dcefe4;
   --font-sans: "Figtree", -apple-system, "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
 }
@@ -157,6 +166,20 @@ details[open] > summary .disclosure-arrow { transform: rotate(90deg); }
 .board-wrap { flex: 1; min-width: 0; }
 .board-section { padding: 16px 24px; }
 
+/* Always-present strip above the board. Holds the sidebar-expand button (which
+   only shows while collapsed) and the profile shortcut, so reaching your
+   profile never depends on the sidebar being open. */
+.board-utility { display: flex; align-items: center; gap: 12px; padding: 12px 24px 0; }
+.board-utility .sidebar-expand-btn { margin: 0; }
+/* Absorb the strip's height so the board doesn't get pushed down a full row. */
+.board-utility + .board-section { padding-top: 8px; }
+/* Wrapper only - the avatar inside carries the shape, matching how the same
+   photo/initials pair is rendered on task cards and the team list. */
+.profile-btn { margin-left: auto; flex-shrink: 0; display: flex; border-radius: 999px; text-decoration: none; }
+.profile-btn:hover { filter: brightness(1.15); }
+.profile-avatar { margin-left: 0; width: 32px; height: 32px; font-size: 12px; }
+.profile-avatar-img { width: 32px; height: 32px; border-radius: 999px; object-fit: cover; }
+
 .board-topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 .board-topbar .btn-primary { margin-left: auto; }
 .topbar-actions { display: flex; gap: 8px; margin-left: auto; }
@@ -287,8 +310,24 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 }
 .task-card:hover { border-color: rgba(0,37,40,0.35); box-shadow: 0 4px 12px rgba(0,37,40,0.08); transform: translateY(-1px); }
 .task-card.flagged { border-color: rgba(185,121,31,0.6); }
+
+/* htmx sets .htmx-request on an element for the life of its request. Even a
+   fast round trip is ~100ms of network before anything can change on screen,
+   and with no feedback in that window a click reads as "nothing happened",
+   which is most of what feels sluggish. Acknowledge the press immediately. */
+.task-card.htmx-request { opacity: 0.5; }
+.btn-primary.htmx-request, .btn-ghost.htmx-request, .sidebar-task.htmx-request { opacity: 0.6; cursor: progress; }
+
+/* Status now reads off the whole card rather than a dot in the corner. The
+   base --task-bg above stays as the fallback for any status not listed here. */
+.task-card.status-backlog { background: var(--tint-backlog); }
+.task-card.status-in_progress { background: var(--tint-in-progress); }
+.task-card.status-at_risk { background: var(--tint-at-risk); }
+.task-card.status-blocked { background: var(--tint-blocked); }
+.task-card.status-in_review { background: var(--tint-in-review); }
+.task-card.status-done { background: var(--tint-done); }
+
 .workstream-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: var(--muted); }
-.task-card-top { display: flex; justify-content: space-between; gap: 8px; }
 .task-card-title { font-size: 14px; font-weight: 500; line-height: 1.35; margin: 0; }
 .status-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; margin-top: 4px; }
 .task-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
@@ -381,6 +420,45 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .link-muted { color: var(--muted); background: none; border: none; font-size: 14px; cursor: pointer; padding: 6px 10px; }
+
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.modal-head .eyebrow { margin: 0; }
+.modal-close { font-size: 18px; line-height: 1; }
+
+/* Destructive/irreversible actions live behind this menu rather than sitting
+   next to Save, where Delete was one mis-click away from the primary button. */
+.modal-menu { position: relative; }
+.modal-menu > summary { list-style: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 5px 9px; border-radius: 3px; }
+.modal-menu > summary::-webkit-details-marker { display: none; }
+.modal-menu > summary:hover { background: var(--hover-tint); color: var(--ink); }
+.modal-menu[open] > summary { background: var(--hover-tint); color: var(--ink); }
+.modal-menu-list {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: 0 8px 20px rgba(0,37,40,0.15);
+  padding: 4px;
+  z-index: 1;
+}
+.modal-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.modal-menu-item:hover { background: var(--hover-tint); }
+.modal-menu-item.danger { color: var(--blocked); }
 
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .login-card { width: 100%; max-width: 360px; }

@@ -2,7 +2,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from app import tokens
-from app.supabase_client import get_service_client
+from app.data import fetch_profiles
 
 
 def current_user(request: Request) -> dict | None:
@@ -41,5 +41,11 @@ def require_login(request: Request) -> RedirectResponse | None:
 
 
 def _profile_exists(user_id: str) -> bool:
-    rows = get_service_client().table("profiles").select("id").eq("id", user_id).execute().data
-    return bool(rows)
+    # Goes through fetch_profiles() rather than querying this one id directly,
+    # so it shares the request cache. This check runs at the top of every
+    # protected route - including the board and sidebar polls - and as its own
+    # query it was an extra Supabase round trip on all of them. Reading the
+    # whole (small) profiles table costs the same single round trip and leaves
+    # the result cached for the render that follows, which almost always needs
+    # profiles anyway.
+    return user_id in fetch_profiles()

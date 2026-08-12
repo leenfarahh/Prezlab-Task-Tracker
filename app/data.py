@@ -1,3 +1,5 @@
+from app.request_cache import memo as _memo
+from app.request_cache import prefetch
 from app.supabase_client import get_service_client
 from app.view_helpers import (
     STATUS_COLOR,
@@ -12,43 +14,61 @@ from app.view_helpers import (
     is_overdue,
 )
 
-
 def fetch_profiles() -> dict[str, dict]:
-    rows = get_service_client().table("profiles").select("*").execute().data
-    for r in rows:
-        r["initials"] = initials(r["full_name"])
-    return {r["id"]: r for r in rows}
+    def load():
+        rows = get_service_client().table("profiles").select("*").execute().data
+        for r in rows:
+            r["initials"] = initials(r["full_name"])
+        return {r["id"]: r for r in rows}
+
+    return _memo("profiles", load)
 
 
 def fetch_projects(archived: bool = False) -> list[dict]:
-    return (
-        get_service_client()
-        .table("projects")
-        .select("*")
-        .eq("is_archived", archived)
-        .order("created_at")
-        .execute()
-        .data
-    )
+    def load():
+        return (
+            get_service_client()
+            .table("projects")
+            .select("*")
+            .eq("is_archived", archived)
+            .order("created_at")
+            .execute()
+            .data
+        )
+
+    return _memo(f"projects:{archived}", load)
 
 
 def fetch_workstreams(archived: bool = False, project_id: str | None = None) -> list[dict]:
-    query = get_service_client().table("workstreams").select("*").eq("is_archived", archived)
-    if project_id:
-        query = query.eq("project_id", project_id)
-    return query.order("created_at").execute().data
+    def load():
+        query = get_service_client().table("workstreams").select("*").eq("is_archived", archived)
+        if project_id:
+            query = query.eq("project_id", project_id)
+        return query.order("created_at").execute().data
+
+    return _memo(f"workstreams:{archived}:{project_id}", load)
+
+
+def fetch_task(task_id: str) -> dict:
+    def load():
+        return get_service_client().table("tasks").select("*").eq("id", task_id).single().execute().data
+
+    return _memo(f"task:{task_id}", load)
 
 
 def fetch_tasks(archived: bool = False) -> list[dict]:
-    return (
-        get_service_client()
-        .table("tasks")
-        .select("*")
-        .eq("is_archived", archived)
-        .order("created_at")
-        .execute()
-        .data
-    )
+    def load():
+        return (
+            get_service_client()
+            .table("tasks")
+            .select("*")
+            .eq("is_archived", archived)
+            .order("created_at")
+            .execute()
+            .data
+        )
+
+    return _memo(f"tasks:{archived}", load)
 
 
 def build_sidebar_context(active_project: str, active_workstream: str = "all") -> dict:
@@ -57,6 +77,7 @@ def build_sidebar_context(active_project: str, active_workstream: str = "all") -
         # doesn't apply there - skip fetching data it won't use.
         return {"projects": [], "active_project": active_project, "active_workstream": active_workstream}
 
+    prefetch(fetch_projects, fetch_workstreams, fetch_tasks)
     projects = fetch_projects()
     workstreams = fetch_workstreams()
     tasks = fetch_tasks()
@@ -78,6 +99,12 @@ def build_sidebar_context(active_project: str, active_workstream: str = "all") -
 
 def build_board_context(active_project: str, active_workstream: str) -> dict:
     show_archived = active_project == "archived"
+    prefetch(
+        fetch_profiles,
+        fetch_projects,
+        lambda: fetch_workstreams(archived=show_archived),
+        lambda: fetch_tasks(archived=show_archived),
+    )
     profiles = fetch_profiles()
 
     projects = fetch_projects()
@@ -157,6 +184,12 @@ def build_board_context(active_project: str, active_workstream: str) -> dict:
 
 
 def build_archived_workstreams_context() -> dict:
+    prefetch(
+        lambda: fetch_workstreams(archived=True),
+        fetch_projects,
+        lambda: fetch_projects(archived=True),
+        lambda: fetch_tasks(archived=True),
+    )
     workstreams = fetch_workstreams(archived=True)
     projects = {p["id"]: p for p in fetch_projects() + fetch_projects(archived=True)}
     archived_tasks = fetch_tasks(archived=True)
@@ -168,6 +201,7 @@ def build_archived_workstreams_context() -> dict:
 
 
 def build_archived_projects_context() -> dict:
+    prefetch(lambda: fetch_projects(archived=True), lambda: fetch_workstreams(archived=True))
     projects = fetch_projects(archived=True)
     workstreams = fetch_workstreams(archived=True)
     for p in projects:
@@ -181,9 +215,22 @@ def build_archived_projects_context() -> dict:
 
 
 def build_team_context() -> dict:
+    prefetch(
+        fetch_profiles,
+        fetch_projects,
+        lambda: fetch_projects(archived=True),
+        fetch_workstreams,
+        lambda: fetch_workstreams(archived=True),
+        fetch_tasks,
+    )
     profiles = fetch_profiles()
-    workstreams_by_id = {w["id"]: w for w in fetch_workstreams()}
-    projects_by_id = {p["id"]: p for p in fetch_projects()}
+    # Archived rows are included in the name lookups on purpose. A live task
+    # should never sit in an archived workstream (unarchive_task refuses to
+    # create one), but rows predating that guard still exist, and naming them
+    # "Unknown - Unknown" with a dead link tells nobody anything. Resolving the
+    # real name shows where the task actually lives so it can be dealt with.
+    workstreams_by_id = {w["id"]: w for w in fetch_workstreams() + fetch_workstreams(archived=True)}
+    projects_by_id = {p["id"]: p for p in fetch_projects() + fetch_projects(archived=True)}
     tasks = fetch_tasks()
 
     for t in tasks:
@@ -218,12 +265,21 @@ def build_team_context() -> dict:
 
 
 def build_user_context(user_id: str) -> dict:
+    prefetch(
+        fetch_profiles,
+        fetch_projects,
+        lambda: fetch_projects(archived=True),
+        fetch_workstreams,
+        lambda: fetch_workstreams(archived=True),
+        fetch_tasks,
+    )
     profiles = fetch_profiles()
     person = profiles.get(user_id)
 
-    workstreams = fetch_workstreams()
-    workstreams_by_id = {w["id"]: w for w in workstreams}
-    projects_by_id = {p["id"]: p for p in fetch_projects()}
+    # Same reasoning as build_team_context: archived rows are here so a legacy
+    # orphaned task still resolves to a real workstream and project name.
+    workstreams_by_id = {w["id"]: w for w in fetch_workstreams() + fetch_workstreams(archived=True)}
+    projects_by_id = {p["id"]: p for p in fetch_projects() + fetch_projects(archived=True)}
 
     tasks = [t for t in fetch_tasks() if t["assignee_id"] == user_id]
     for t in tasks:

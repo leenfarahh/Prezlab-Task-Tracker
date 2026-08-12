@@ -1,13 +1,10 @@
-{% macro task_card(task, assignee, status_color, priority_label, priority_color, active_project, active_workstream, flagged=False) -%}
-<button class="task-card {{ 'flagged' if flagged else '' }}"
+{% macro task_card(task, assignee, priority_label, priority_color, active_project, active_workstream, flagged=False) -%}
+<button class="task-card status-{{ task.status }} {{ 'flagged' if flagged else '' }}"
         hx-get="/partials/task-detail-modal?task_id={{ task.id }}&project={{ active_project }}&workstream={{ active_workstream }}" hx-target="#modal-root" hx-swap="innerHTML">
   {% if active_workstream in ("all", "archived", "by_user") and task.workstream_name %}
   <p class="workstream-tag">{{ task.workstream_name }}</p>
   {% endif %}
-  <div class="task-card-top">
-    <p class="task-card-title">{{ task.title }}</p>
-    <span class="status-dot" style="background-color: {{ status_color }};"></span>
-  </div>
+  <p class="task-card-title">{{ task.title }}</p>
   <div class="task-card-meta">
     <span class="priority-pill" style="background-color: {{ priority_color }};">{{ priority_label }}</span>
     {% if task.due_date_display %}

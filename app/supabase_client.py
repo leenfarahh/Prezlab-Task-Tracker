@@ -23,6 +23,7 @@ import httpx
 from supabase import Client, create_client
 
 from app.config import SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
+from app.request_cache import invalidate as _invalidate_request_cache
 
 
 class _RetryOnDisconnectTransport(httpx.HTTPTransport):
@@ -47,14 +48,25 @@ class _RetryOnDisconnectTransport(httpx.HTTPTransport):
     """
 
     _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "PATCH", "DELETE"}
+    _READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         try:
-            return super().handle_request(request)
+            response = super().handle_request(request)
         except httpx.RemoteProtocolError:
             if request.method not in self._SAFE_METHODS:
                 raise
-            return super().handle_request(request)
+            response = super().handle_request(request)
+
+        # Any successful write makes whatever this request has already read
+        # potentially stale - most visibly on routes that update a row and
+        # then re-render from it (POST /users/{id} would otherwise redisplay
+        # the name the auth check happened to read a moment earlier). Clearing
+        # here rather than in each route means it can't be forgotten when a
+        # new write is added. See app/request_cache.py.
+        if request.method not in self._READ_METHODS and response.status_code < 400:
+            _invalidate_request_cache()
+        return response
 
 
 @lru_cache

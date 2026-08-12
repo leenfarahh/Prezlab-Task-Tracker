@@ -114,7 +114,7 @@
         <span class="column-count">{{ col.tasks | length }}</span>
       </p>
       {% for task in col.tasks %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
       {% endfor %}
     </div>
     {% else %}
@@ -132,7 +132,7 @@
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), status_color[task.status], priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_project, active_workstream, task.id in flagged_ids) }}
       {% else %}
         <p class="empty-column">Nothing here.</p>
       {% endfor %}

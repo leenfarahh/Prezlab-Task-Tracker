@@ -1,23 +1,34 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-detail', 'click')">
   <form class="modal-card" hx-post="/tasks/{{ task.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <p class="eyebrow">Edit task</p>
+      <button type="button" id="modal-close-detail" class="icon-btn modal-close" aria-label="Close"
+              hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">&times;</button>
+    </div>
+
     <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
     <input name="title" required value="{{ task.title }}" autofocus />
 
-    <label>Status</label>
-    <select name="status">
-      {% for status in status_order %}
-      <option value="{{ status }}" {{ 'selected' if status == task.status else '' }}>{{ status_label[status] }}</option>
-      {% endfor %}
-    </select>
-
-    <label>Owner</label>
-    <select name="assignee_id">
-      <option value="">Unassigned</option>
-      {% for p in profiles %}
-      <option value="{{ p.id }}" {{ 'selected' if p.id == task.assignee_id else '' }}>{{ p.full_name }}</option>
-      {% endfor %}
-    </select>
+    <div class="modal-row">
+      <div>
+        <label>Status</label>
+        <select name="status">
+          {% for status in status_order %}
+          <option value="{{ status }}" {{ 'selected' if status == task.status else '' }}>{{ status_label[status] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Owner</label>
+        <select name="assignee_id">
+          <option value="">Unassigned</option>
+          {% for p in profiles %}
+          <option value="{{ p.id }}" {{ 'selected' if p.id == task.assignee_id else '' }}>{{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
 
     <div class="modal-row">
       <select name="priority">
@@ -30,30 +41,30 @@
     </div>
 
     <div class="modal-actions" style="justify-content: space-between;">
-      <div style="display: flex; gap: 8px;">
-        <button type="button" class="link-muted" style="color: var(--blocked);"
-                hx-get="/partials/confirm-delete-task-modal?task_id={{ task.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
-                hx-target="#modal-root" hx-swap="innerHTML">
-          Delete
-        </button>
-        {% if task.is_archived %}
-        <button type="button" class="link-muted"
-                hx-post="/tasks/{{ task.id }}/unarchive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
-                hx-target="#modal-root" hx-swap="innerHTML">
-          Unarchive
-        </button>
-        {% else %}
-        <button type="button" class="link-muted"
-                hx-post="/tasks/{{ task.id }}/archive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
-                hx-target="#modal-root" hx-swap="innerHTML">
-          Archive
-        </button>
-        {% endif %}
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <button type="button" id="modal-close-detail" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
-        <button type="submit" class="btn-primary">Save changes</button>
-      </div>
+      <details class="modal-menu">
+        <summary aria-label="More actions" title="More actions">&#9776;</summary>
+        <div class="modal-menu-list">
+          {% if task.is_archived %}
+          <button type="button" class="modal-menu-item"
+                  hx-post="/tasks/{{ task.id }}/unarchive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
+                  hx-target="#modal-root" hx-swap="innerHTML">
+            Unarchive task
+          </button>
+          {% else %}
+          <button type="button" class="modal-menu-item"
+                  hx-post="/tasks/{{ task.id }}/archive" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
+                  hx-target="#modal-root" hx-swap="innerHTML">
+            Archive task
+          </button>
+          {% endif %}
+          <button type="button" class="modal-menu-item danger"
+                  hx-get="/partials/confirm-delete-task-modal?task_id={{ task.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+                  hx-target="#modal-root" hx-swap="innerHTML">
+            Delete task
+          </button>
+        </div>
+      </details>
+      <button type="submit" class="btn-primary">Save changes</button>
     </div>
   </form>
 </div>

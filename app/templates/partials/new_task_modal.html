@@ -1,6 +1,10 @@
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new', 'click')">
   <form class="modal-card" hx-post="/tasks" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
-    <p class="eyebrow" style="margin-bottom: 12px;">New task</p>
+    <div class="modal-head">
+      <p class="eyebrow">New task</p>
+      <button type="button" id="modal-close-new" class="icon-btn modal-close" aria-label="Close"
+              hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">&times;</button>
+    </div>
     <input type="hidden" name="workstream_id" value="{{ workstream_id }}" />
     <input type="hidden" name="active_project" value="{{ active_project }}" />
 
@@ -27,7 +31,6 @@
     <input type="date" name="due_date" />
 
     <div class="modal-actions">
-      <button type="button" id="modal-close-new" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
       <button type="submit" class="btn-primary">Add task</button>
     </div>
   </form>

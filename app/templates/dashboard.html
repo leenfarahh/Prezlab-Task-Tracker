@@ -13,7 +13,18 @@
     </div>
   </aside>
   <div class="board-wrap">
-    <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
+    <div class="board-utility">
+      <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
+      {% if viewer %}
+      <a href="/users/{{ viewer.id }}" class="profile-btn" title="{{ viewer.full_name }}">
+        {% if viewer.avatar_url %}
+        <img src="{{ viewer.avatar_url }}" alt="{{ viewer.full_name }}" class="profile-avatar-img" />
+        {% else %}
+        <span class="avatar profile-avatar" style="background-color: {{ viewer.avatar_color }};">{{ viewer.initials }}</span>
+        {% endif %}
+      </a>
+      {% endif %}
+    </div>
     {% include board_template %}
   </div>
 </main>

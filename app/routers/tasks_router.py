@@ -3,11 +3,33 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
+from app.data import fetch_profiles, fetch_task, prefetch
 from app.fragments import refreshed_fragments
 from app.supabase_client import get_service_client
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _guard(request: Request, task_id: str) -> HTMLResponse | None:
+    """Runs the login check and the task-ownership check together.
+
+    Both need one read from Supabase (the profiles table, and this task's row)
+    and neither depends on the other's result, so they go out in a single round
+    trip instead of two back to back. Every write path below starts here, and
+    on this deployment a round trip is most of what the user waits for.
+
+    Prefetching is gated on there being a session at all - a cookie read, no
+    I/O - so an unauthenticated request still does no database work before it
+    gets redirected.
+    """
+    if current_user(request):
+        prefetch(fetch_profiles, lambda: fetch_task(task_id))
+
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    return _task_owner_denial(request, task_id)
 
 
 def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
@@ -16,21 +38,64 @@ def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
     deleting tasks that aren't theirs to touch.
     """
     user = current_user(request)
-    task = (
-        get_service_client()
-        .table("tasks")
-        .select("created_by, assignee_id")
-        .eq("id", task_id)
-        .single()
-        .execute()
-        .data
-    )
+    task = fetch_task(task_id)
     if user["id"] in (task["created_by"], task["assignee_id"]):
         return None
 
     return HTMLResponse(
         templates.get_template("partials/permission_denied_modal.html").render(
             {"request": request, "message": "Only this task's creator or assignee can do that."}
+        )
+    )
+
+
+def _archived_parent_denial(request: Request, task_id: str) -> HTMLResponse | None:
+    """Returns a denial response if this task's workstream (or its project) is
+    still archived, else None.
+
+    Archiving cascades downward - archiving a workstream or project archives
+    everything under it - but restoring a single task has no matching cascade
+    upward, and letting one through would strand a live task inside an archived
+    parent. Those tasks resolve to no workstream and no project, so the board
+    filters them out of existence entirely (build_board_context) while the team
+    and profile pages render them as "Unknown - Unknown" with a dead link.
+    Restore the parent instead; its own cascade brings the tasks back with it.
+    """
+    service = get_service_client()
+    task = fetch_task(task_id)  # already cached by _guard on the write paths
+    workstream = (
+        service.table("workstreams")
+        .select("name, project_id, is_archived")
+        .eq("id", task["workstream_id"])
+        .single()
+        .execute()
+        .data
+    )
+    project = (
+        service.table("projects")
+        .select("name, is_archived")
+        .eq("id", workstream["project_id"])
+        .single()
+        .execute()
+        .data
+    )
+
+    if workstream["is_archived"]:
+        message = (
+            f"This task's workstream ({workstream['name']}) is archived. "
+            "Unarchive the workstream instead - its tasks come back with it."
+        )
+    elif project["is_archived"]:
+        message = (
+            f"This task's project ({project['name']}) is archived. "
+            "Unarchive the project instead - its workstreams and tasks come back with it."
+        )
+    else:
+        return None
+
+    return HTMLResponse(
+        templates.get_template("partials/permission_denied_modal.html").render(
+            {"request": request, "message": message}
         )
     )
 
@@ -76,10 +141,7 @@ def update_task(
     active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-    denial = _task_owner_denial(request, task_id)
+    denial = _guard(request, task_id)
     if denial:
         return denial
 
@@ -124,10 +186,7 @@ def archive_task(
     active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-    denial = _task_owner_denial(request, task_id)
+    denial = _guard(request, task_id)
     if denial:
         return denial
 
@@ -143,10 +202,10 @@ def unarchive_task(
     active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-    denial = _task_owner_denial(request, task_id)
+    denial = _guard(request, task_id)
+    if denial:
+        return denial
+    denial = _archived_parent_denial(request, task_id)
     if denial:
         return denial
 
@@ -162,10 +221,7 @@ def delete_task(
     active_project: str = Form("all"),
     active_workstream: str = Form("all"),
 ):
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-    denial = _task_owner_denial(request, task_id)
+    denial = _guard(request, task_id)
     if denial:
         return denial
 

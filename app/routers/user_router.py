@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import build_sidebar_context, build_team_context, build_user_context
+from app.data import build_sidebar_context, build_team_context, build_user_context, fetch_profiles
 from app.supabase_client import get_service_client
 from app.view_helpers import STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
@@ -21,6 +21,9 @@ def _user_ctx(request: Request, user_id: str) -> dict:
         "status_label": STATUS_LABEL,
         "status_color": STATUS_COLOR,
         "is_self": viewer["id"] == user_id,
+        # The person signed in, not the person being looked at - drives the
+        # profile shortcut in the top bar, which is the same on every page.
+        "viewer": fetch_profiles().get(viewer["id"]),
         **build_user_context(user_id),
     }
 
@@ -33,6 +36,7 @@ def team_page(request: Request):
     ctx = {
         "request": request,
         "board_template": "partials/team.html",
+        "viewer": fetch_profiles().get(current_user(request)["id"]),
         **build_sidebar_context("team"),
         **build_team_context(),
     }
