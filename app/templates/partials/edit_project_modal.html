@@ -7,9 +7,8 @@
 
     <div class="modal-actions" style="justify-content: space-between;">
       <button type="button" class="link-muted" style="color: var(--blocked);"
-              hx-post="/projects/{{ project.id }}/archive" hx-vals='{"active_project": "{{ active_project }}"}'
-              hx-target="#modal-root" hx-swap="innerHTML"
-              hx-confirm="Archive this project? It'll be hidden from the sidebar and board, and its workstreams and tasks will be archived along with it.">
+              hx-get="/partials/confirm-archive-project-modal?project_id={{ project.id }}&active_project={{ active_project }}"
+              hx-target="#modal-root" hx-swap="innerHTML">
         Archive
       </button>
       <div style="display: flex; gap: 8px;">

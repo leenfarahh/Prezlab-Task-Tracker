@@ -26,7 +26,6 @@
         </button>
       </summary>
 
-      {% if p.workstreams %}
       <div class="sidebar-workstreams">
         {% for ws in p.workstreams %}
         <details class="sidebar-details" id="workstream-{{ ws.id }}" data-key="workstream:{{ ws.id }}">
@@ -57,8 +56,10 @@
           {% endif %}
         </details>
         {% endfor %}
+        <a href="/?project={{ p.id }}&workstream=by_user" class="sidebar-item sidebar-item-sub {{ 'active' if active_project == p.id and active_workstream == 'by_user' else '' }}">
+          By user
+        </a>
       </div>
-      {% endif %}
     </details>
     {% endfor %}
   </div>

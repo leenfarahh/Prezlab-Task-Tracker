@@ -1,0 +1,18 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-new-text', 'click')">
+  <form class="modal-card" hx-post="/tasks/parse" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px;">New task from text</p>
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+
+    {% if error %}
+    <p style="margin: 0 0 10px; font-size: 13px; color: var(--blocked);">{{ error }}</p>
+    {% endif %}
+
+    <textarea name="prompt" required rows="4" placeholder="What do you need to get done? e.g. &quot;Review the Acme deck by Friday, ask Sanad to fix the budget slide&quot;" autofocus>{{ prompt or '' }}</textarea>
+
+    <div class="modal-actions">
+      <button type="button" id="modal-close-new-text" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+      <button type="submit" class="btn-primary">Draft tasks</button>
+    </div>
+  </form>
+</div>

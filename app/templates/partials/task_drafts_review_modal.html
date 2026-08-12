@@ -1,0 +1,59 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-drafts', 'click')">
+  <form class="modal-card" style="max-width: 640px; max-height: 85vh; overflow-y: auto;" hx-post="/tasks/batch" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px;">Review {{ drafts|length }} draft task{{ 's' if drafts|length != 1 else '' }}</p>
+    <input type="hidden" name="active_project" value="{{ active_project }}" />
+    <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
+
+    {% if not drafts %}
+    <p style="font-size: 14px; color: var(--muted);">Nothing came out of that prompt - try describing the work more specifically.</p>
+    {% endif %}
+
+    {% for draft in drafts %}
+    <div style="border: 1px solid var(--line); border-radius: 3px; padding: 12px; margin-bottom: 12px;">
+      <label style="display: flex; align-items: center; gap: 6px; font-family: inherit; text-transform: none; margin-bottom: 8px;">
+        <input type="checkbox" name="include_{{ loop.index0 }}" checked style="width: auto; margin: 0;" />
+        Create this task
+      </label>
+
+      <input name="title_{{ loop.index0 }}" required value="{{ draft.title }}" placeholder="Title" />
+      <textarea name="description_{{ loop.index0 }}" rows="2" placeholder="Description (optional)">{{ draft.description or '' }}</textarea>
+
+      <div class="modal-row">
+        <select name="priority_{{ loop.index0 }}">
+          <option value="low" {{ 'selected' if draft.priority == 'low' else '' }}>Low priority</option>
+          <option value="medium" {{ 'selected' if draft.priority == 'medium' else '' }}>Medium priority</option>
+          <option value="high" {{ 'selected' if draft.priority == 'high' else '' }}>High priority</option>
+          <option value="urgent" {{ 'selected' if draft.priority == 'urgent' else '' }}>Urgent</option>
+        </select>
+        <input type="date" name="due_date_{{ loop.index0 }}" value="{{ draft.due_date }}" />
+      </div>
+
+      <div class="modal-row">
+        <select name="assignee_id_{{ loop.index0 }}">
+          <option value="">Unassigned</option>
+          {% for p in profiles %}
+          <option value="{{ p.id }}" {{ 'selected' if p.id == draft.assignee_id else '' }}>{{ p.full_name }}</option>
+          {% endfor %}
+        </select>
+        <select name="workstream_id_{{ loop.index0 }}" required>
+          <option value="" {{ 'selected' if not draft.workstream_id else '' }} disabled>Pick a workstream…</option>
+          {% for project_name, group in workstreams|sort(attribute='project_name')|groupby('project_name') %}
+          <optgroup label="{{ project_name }}">
+            {% for w in group %}
+            <option value="{{ w.id }}" {{ 'selected' if w.id == draft.workstream_id else '' }}>{{ w.name }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="modal-actions">
+      <button type="button" id="modal-close-drafts" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+      {% if drafts %}
+      <button type="submit" class="btn-primary">Create {{ drafts|length }} task{{ 's' if drafts|length != 1 else '' }}</button>
+      {% endif %}
+    </div>
+  </form>
+</div>

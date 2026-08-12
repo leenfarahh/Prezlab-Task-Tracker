@@ -32,9 +32,8 @@
     <div class="modal-actions" style="justify-content: space-between;">
       <div style="display: flex; gap: 8px;">
         <button type="button" class="link-muted" style="color: var(--blocked);"
-                hx-post="/tasks/{{ task.id }}/delete" hx-vals='{"active_project": "{{ active_project }}", "active_workstream": "{{ active_workstream }}"}'
-                hx-target="#modal-root" hx-swap="innerHTML"
-                hx-confirm="Delete this task? This can't be undone.">
+                hx-get="/partials/confirm-delete-task-modal?task_id={{ task.id }}&active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+                hx-target="#modal-root" hx-swap="innerHTML">
           Delete
         </button>
         {% if task.is_archived %}

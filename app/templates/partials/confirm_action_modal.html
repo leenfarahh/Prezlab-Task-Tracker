@@ -1,0 +1,14 @@
+<div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-confirm', 'click')">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <p class="eyebrow" style="margin-bottom: 12px; color: var(--blocked);">{{ title }}</p>
+    <p style="margin: 0 0 16px; font-size: 14px;">{{ message }}</p>
+    <div class="modal-actions">
+      <button type="button" id="modal-close-confirm" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
+      <button type="button" class="btn-primary" style="background: var(--blocked);"
+              hx-post="{{ confirm_url }}" hx-vals='{{ confirm_vals | tojson }}'
+              hx-target="#modal-root" hx-swap="innerHTML">
+        {{ confirm_label }}
+      </button>
+    </div>
+  </div>
+</div>

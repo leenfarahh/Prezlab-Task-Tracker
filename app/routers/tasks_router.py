@@ -3,9 +3,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import build_board_context, build_sidebar_context
+from app.fragments import refreshed_fragments
 from app.supabase_client import get_service_client
-from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -36,25 +35,6 @@ def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
     )
 
 
-def _refreshed_fragments(request: Request, active_project: str, active_workstream: str) -> str:
-    """Renders board + sidebar as out-of-band swaps, closing the modal in the process."""
-    board_ctx = {
-        "request": request,
-        "status_order": STATUS_ORDER,
-        "status_label": STATUS_LABEL,
-        "status_color": STATUS_COLOR,
-        "priority_label": PRIORITY_LABEL,
-        "priority_color": PRIORITY_COLOR,
-        "oob": True,
-        **build_board_context(active_project, active_workstream),
-    }
-    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_project, active_workstream)}
-
-    board_html = templates.get_template("partials/board.html").render(board_ctx)
-    sidebar_html = templates.get_template("partials/sidebar.html").render(sidebar_ctx)
-    return board_html + sidebar_html
-
-
 @router.post("/tasks", response_class=HTMLResponse)
 def create_task(
     request: Request,
@@ -81,7 +61,7 @@ def create_task(
         }
     ).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_project, workstream_id))
+    return HTMLResponse(refreshed_fragments(request, active_project, workstream_id))
 
 
 @router.post("/tasks/{task_id}", response_class=HTMLResponse)
@@ -113,7 +93,28 @@ def update_task(
         }
     ).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
+
+
+@router.get("/partials/confirm-delete-task-modal", response_class=HTMLResponse)
+def confirm_delete_task_modal(
+    request: Request,
+    task_id: str,
+    active_project: str = "all",
+    active_workstream: str = "all",
+):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {
+        "request": request,
+        "title": "Delete task",
+        "message": "Delete this task? This can't be undone.",
+        "confirm_url": f"/tasks/{task_id}/delete",
+        "confirm_vals": {"active_project": active_project, "active_workstream": active_workstream},
+        "confirm_label": "Delete",
+    }
+    return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
 
 
 @router.post("/tasks/{task_id}/archive", response_class=HTMLResponse)
@@ -132,7 +133,7 @@ def archive_task(
 
     get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
 
 
 @router.post("/tasks/{task_id}/unarchive", response_class=HTMLResponse)
@@ -151,7 +152,7 @@ def unarchive_task(
 
     get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))
 
 
 @router.post("/tasks/{task_id}/delete", response_class=HTMLResponse)
@@ -170,4 +171,4 @@ def delete_task(
 
     get_service_client().table("tasks").delete().eq("id", task_id).execute()
 
-    return HTMLResponse(_refreshed_fragments(request, active_project, active_workstream))
+    return HTMLResponse(refreshed_fragments(request, active_project, active_workstream))

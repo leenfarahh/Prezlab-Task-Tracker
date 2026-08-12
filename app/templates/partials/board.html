@@ -22,25 +22,32 @@
     </div>
     {% endif %}
 
-    {% if show_new_project %}
-    <button class="btn-primary"
-            hx-get="/partials/new-project-modal"
-            hx-target="#modal-root" hx-swap="innerHTML">
-      + New project
-    </button>
-    {% elif show_new_workstream %}
-    <button class="btn-primary"
-            hx-get="/partials/new-workstream-modal?project_id={{ scoped_project.id }}"
-            hx-target="#modal-root" hx-swap="innerHTML">
-      + New workstream
-    </button>
-    {% elif show_new_task %}
-    <button class="btn-primary"
-            hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}&active_project={{ active_project }}"
-            hx-target="#modal-root" hx-swap="innerHTML">
-      + New task
-    </button>
-    {% endif %}
+    <div class="topbar-actions">
+      {% if show_new_project %}
+      <button class="btn-primary"
+              hx-get="/partials/new-project-modal"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        + New project
+      </button>
+      {% elif show_new_workstream %}
+      <button class="btn-primary"
+              hx-get="/partials/new-workstream-modal?project_id={{ scoped_project.id }}"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        + New workstream
+      </button>
+      {% elif show_new_task %}
+      <button class="btn-primary"
+              hx-get="/partials/new-task-modal?workstream_id={{ active_workstream }}&active_project={{ active_project }}"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        + New task
+      </button>
+      {% endif %}
+      <button class="btn-ghost"
+              hx-get="/partials/new-task-text-modal?active_project={{ active_project }}&active_workstream={{ active_workstream }}"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        + New task from text
+      </button>
+    </div>
   </div>
   {% endif %}
 

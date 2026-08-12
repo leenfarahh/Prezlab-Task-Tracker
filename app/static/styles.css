@@ -159,6 +159,7 @@ details[open] > summary .disclosure-arrow { transform: rotate(90deg); }
 
 .board-topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 .board-topbar .btn-primary { margin-left: auto; }
+.topbar-actions { display: flex; gap: 8px; margin-left: auto; }
 .tab-strip { display: none; flex-wrap: wrap; gap: 4px; }
 html.sidebar-collapsed .tab-strip { display: flex; }
 .subtab-strip { display: none; flex-wrap: wrap; gap: 4px; }
@@ -371,9 +372,10 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,37,40,0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
 .modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 12px 32px rgba(0,37,40,0.15); }
-.modal-card input, .modal-card select {
+.modal-card input, .modal-card select, .modal-card textarea {
   width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 3px;
   padding: 8px 10px; font-size: 14px; color: var(--ink); margin-top: 4px; margin-bottom: 10px;
+  font-family: inherit; resize: vertical;
 }
 .modal-card label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

@@ -80,6 +80,27 @@ def edit_workstream_modal(
     )
 
 
+@router.get("/partials/confirm-archive-workstream-modal", response_class=HTMLResponse)
+def confirm_archive_workstream_modal(
+    request: Request,
+    workstream_id: str,
+    active_project: str = "all",
+    active_workstream: str = "all",
+):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {
+        "request": request,
+        "title": "Archive workstream",
+        "message": "Archive this workstream? It'll be hidden from the sidebar and board, and its tasks will be archived along with it.",
+        "confirm_url": f"/workstreams/{workstream_id}/archive",
+        "confirm_vals": {"active_project": active_project, "active_workstream": active_workstream},
+        "confirm_label": "Archive",
+    }
+    return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
+
+
 @router.post("/workstreams/{workstream_id}", response_class=HTMLResponse)
 def update_workstream(
     request: Request,

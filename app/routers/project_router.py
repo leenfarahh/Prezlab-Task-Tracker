@@ -63,6 +63,22 @@ def edit_project_modal(request: Request, project_id: str, active_project: str = 
     )
 
 
+@router.get("/partials/confirm-archive-project-modal", response_class=HTMLResponse)
+def confirm_archive_project_modal(request: Request, project_id: str, active_project: str = "all"):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    ctx = {
+        "request": request,
+        "title": "Archive project",
+        "message": "Archive this project? It'll be hidden from the sidebar and board, and its workstreams and tasks will be archived along with it.",
+        "confirm_url": f"/projects/{project_id}/archive",
+        "confirm_vals": {"active_project": active_project},
+        "confirm_label": "Archive",
+    }
+    return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
+
+
 @router.post("/projects/{project_id}", response_class=HTMLResponse)
 def update_project(request: Request, project_id: str, name: str = Form(...), active_project: str = Form("all")):
     redirect = require_login(request)
