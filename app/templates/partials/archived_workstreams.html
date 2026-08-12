@@ -1,6 +1,9 @@
+{# outerHTML-style morph, not innerHTML - see the note in partials/board.html:
+   the endpoint returns this wrapper too, so an innerHTML swap self-nested a new
+   poller on every tick. #}
 <section class="board-section" id="board-container"
-         {% if oob %}hx-swap-oob="true"{% endif %}
-         hx-get="/partials/archived-workstreams" hx-trigger="every 5s" hx-swap="innerHTML">
+         {% if oob %}hx-swap-oob="morph"{% endif %}
+         hx-get="/partials/archived-workstreams" hx-trigger="every 5s" hx-swap="morph">
   <div class="board-header">
     <h1>Archived workstreams</h1>
   </div>

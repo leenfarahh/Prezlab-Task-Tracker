@@ -1,8 +1,16 @@
 {% import "partials/task_card.html" as tc %}
 {% import "partials/health_strip.html" as hs %}
+{# /partials/board renders this whole <section>, wrapper included, so the poll
+   has to REPLACE the element, not fill it. With hx-swap="innerHTML" every tick
+   nested a fresh #board-container - each carrying its own "every 5s" poll -
+   inside the previous one, so the number of pollers (and requests, and full
+   board rebuilds) doubled every 5 seconds. "morph" is outerHTML-style and
+   Idiomorph diffs in place instead of tearing the DOM down, which also keeps
+   hover/focus/scroll state and stops the visible flicker. Same reason the oob
+   refresh after a create/edit/archive morphs instead of replacing outright. #}
 <section class="board-section" id="board-container"
-         {% if oob %}hx-swap-oob="true"{% endif %}
-         hx-get="/partials/board?project={{ active_project }}&workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="innerHTML">
+         {% if oob %}hx-swap-oob="morph"{% endif %}
+         hx-get="/partials/board?project={{ active_project }}&workstream={{ active_workstream }}" hx-trigger="every 5s" hx-swap="morph">
   {% if active_project != "archived" %}
   <div class="board-topbar">
     {% if scoped_project %}

@@ -172,7 +172,12 @@ def build_archived_projects_context() -> dict:
     workstreams = fetch_workstreams(archived=True)
     for p in projects:
         p["archived_workstream_count"] = sum(1 for w in workstreams if w["project_id"] == p["id"])
-    return {"projects": projects}
+    # Deliberately not called "projects": the routes merge this dict on top of
+    # build_sidebar_context(), which owns "projects" (the live, non-archived
+    # tree the sidebar renders). Returning that key here let the archived list
+    # win the merge, so the sidebar briefly listed archived projects until its
+    # own 6s poll replaced them.
+    return {"archived_projects": projects}
 
 
 def build_team_context() -> dict:

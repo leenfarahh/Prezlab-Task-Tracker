@@ -1,5 +1,15 @@
 {% import "partials/health_strip.html" as hs %}
-{% if oob %}<div hx-swap-oob="innerHTML:#sidebar-body">{% endif %}
+{# The wrapper is always rendered (not just for oob) so the post-action refresh
+   has a stable element to morph into: hx-swap-oob="innerHTML:#sidebar-body"
+   tore the whole tree down and rebuilt it on every button press, which is what
+   made the sidebar flash. "morph:innerHTML:#sidebar-body" is not an option -
+   htmx splits hx-swap-oob at the FIRST colon, so everything after "morph:"
+   would be read as the target selector - hence an id here plus plain "morph"
+   (outerHTML-style). The poll attributes deliberately stay on #sidebar-body in
+   dashboard.html: an oob refresh must not be able to rewrite the poll URL,
+   since some callers (e.g. project create) render the sidebar for a different
+   scope than the page the user is actually on. #}
+<div id="sidebar-tree" {% if oob %}hx-swap-oob="morph"{% endif %}>
   <p class="eyebrow" style="margin-bottom: 16px;">AI Team</p>
 
   <a href="/team"     class="sidebar-item {{ 'active' if active_project == 'team' else '' }}">
@@ -83,4 +93,4 @@
   <form method="post" action="/logout">
     <button type="submit" class="sidebar-item" style="width: 100%;">Log out</button>
   </form>
-{% if oob %}</div>{% endif %}
+</div>

@@ -1,11 +1,14 @@
+{# outerHTML-style morph, not innerHTML - see the note in partials/board.html:
+   the endpoint returns this wrapper too, so an innerHTML swap self-nested a new
+   poller on every tick. #}
 <section class="board-section" id="board-container"
-         {% if oob %}hx-swap-oob="true"{% endif %}
-         hx-get="/partials/archived-projects" hx-trigger="every 5s" hx-swap="innerHTML">
+         {% if oob %}hx-swap-oob="morph"{% endif %}
+         hx-get="/partials/archived-projects" hx-trigger="every 5s" hx-swap="morph">
   <div class="board-header">
     <h1>Archived projects</h1>
   </div>
 
-  {% for p in projects %}
+  {% for p in archived_projects %}
   <div class="task-card" style="display: flex; align-items: center; justify-content: space-between; cursor: default; max-width: 420px;">
     <div>
       <p class="task-card-title">{{ p.name }}</p>
