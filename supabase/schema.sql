@@ -111,7 +111,7 @@ create trigger tasks_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------- Activity log ----------
--- Append-only trail that both the UI feed and the Pulse digest read from.
+-- Append-only trail that the UI feed reads from.
 
 create table if not exists public.task_activity (
   id uuid primary key default gen_random_uuid(),
@@ -124,7 +124,7 @@ create table if not exists public.task_activity (
 
 create index if not exists task_activity_task_idx on public.task_activity (task_id);
 
--- Auto-log status changes so the digest has a reliable feed without relying on the client to log it.
+-- Auto-log status changes so the feed stays reliable without relying on the client to log it.
 create or replace function public.log_task_change()
 returns trigger as $$
 begin
@@ -153,19 +153,6 @@ drop trigger if exists tasks_log_change on public.tasks;
 create trigger tasks_log_change
   after insert or update on public.tasks
   for each row execute procedure public.log_task_change();
-
--- ---------- Pulse digests ----------
--- Cached LLM output so the dashboard doesn't call the model on every page load.
-
-create table if not exists public.pulse_digests (
-  id uuid primary key default gen_random_uuid(),
-  generated_at timestamptz not null default now(),
-  generated_by uuid references public.profiles (id),
-  summary text not null,
-  flagged_task_ids uuid[] not null default '{}',
-  model text not null default 'claude-sonnet-5',
-  input_task_count int not null default 0
-);
 
 -- ---------- Session refresh tokens ----------
 -- The signed cookie set on login (app/main.py) is a short-lived, in-memory
@@ -208,7 +195,6 @@ alter table public.projects enable row level security;
 alter table public.workstreams enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_activity enable row level security;
-alter table public.pulse_digests enable row level security;
 
 drop policy if exists "profiles readable by authenticated users" on public.profiles;
 create policy "profiles readable by authenticated users" on public.profiles
@@ -234,13 +220,6 @@ create policy "activity readable by authenticated users" on public.task_activity
   for select using (auth.role() = 'authenticated');
 drop policy if exists "activity insertable by authenticated users" on public.task_activity;
 create policy "activity insertable by authenticated users" on public.task_activity
-  for insert with check (auth.role() = 'authenticated');
-
-drop policy if exists "digests readable by authenticated users" on public.pulse_digests;
-create policy "digests readable by authenticated users" on public.pulse_digests
-  for select using (auth.role() = 'authenticated');
-drop policy if exists "digests insertable by authenticated users" on public.pulse_digests;
-create policy "digests insertable by authenticated users" on public.pulse_digests
   for insert with check (auth.role() = 'authenticated');
 
 -- ---------- Realtime ----------
@@ -273,6 +252,12 @@ alter table public.workstreams add column if not exists client_label text;
 alter table public.projects drop column if exists owner_id;
 alter table public.workstreams drop column if exists owner_id;
 drop table if exists public.products;
+
+-- The Pulse digest table is gone from this schema: this version has no digest
+-- feature, so nothing reads or writes it. Left in place rather than dropped
+-- automatically, because the JS version does use it and may be pointed at the
+-- same Supabase project. Uncomment only once you've confirmed it isn't:
+-- drop table if exists public.pulse_digests;
 
 alter table public.tasks add column if not exists is_archived boolean not null default false;
 create index if not exists tasks_is_archived_idx on public.tasks (is_archived);

@@ -108,7 +108,7 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.
 - **Unarchiving a project is not an exact undo.** Archiving a project archives its workstreams and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the project was archived comes back out too. Rare, but surprising when it happens.
-- **`pulse_digests` in `supabase/schema.sql` is unused here.** The table and its policies are carried over from the JS version's Workstream Pulse digest, which this Python version doesn't implement — `docs/llm-feature-proposal.md` describes that feature, not what's built here. Harmless, but don't read the schema as a map of what the app does.
+- **`docs/llm-feature-proposal.md` describes a feature this version doesn't have.** It argues for the JS version's Workstream Pulse digest; the LLM feature actually built here is "New task from text". Read it as background on the decision, not as a description of the app.
 - **No comments/notifications** — same scope cut as the JS version, contained follow-ups rather than schema changes.
 
 Flag any of these in a review round if they turn out to matter more than expected. Most are contained changes rather than rewrites — the exception is the Gemini data-sharing point, which is a decision to make rather than a bug to fix.
