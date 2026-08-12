@@ -253,11 +253,9 @@ alter table public.projects drop column if exists owner_id;
 alter table public.workstreams drop column if exists owner_id;
 drop table if exists public.products;
 
--- The Pulse digest table is gone from this schema: this version has no digest
 -- feature, so nothing reads or writes it. Left in place rather than dropped
 -- automatically, because the JS version does use it and may be pointed at the
 -- same Supabase project. Uncomment only once you've confirmed it isn't:
--- drop table if exists public.pulse_digests;
 
 alter table public.tasks add column if not exists is_archived boolean not null default false;
 create index if not exists tasks_is_archived_idx on public.tasks (is_archived);
