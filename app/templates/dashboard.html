@@ -71,6 +71,15 @@
       {% endif %}
       </div>
     </div>
+    {# Derived here rather than passed in by each route: six routes render this
+       page and a flag would have to be set (and remembered) in all of them. A
+       live board needs no escape tabs - it has the sidebar tree plus its own
+       strips - but the archived task board is partials/board.html too, and its
+       sidebar tree is empty, so it is named explicitly. #}
+    {% set is_live_board = board_template == "partials/board.html" and active_workstream != "archived" %}
+    {% if not is_live_board %}
+    {% include "partials/nav_tabs.html" %}
+    {% endif %}
     {% include board_template %}
   </div>
 </main>

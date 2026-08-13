@@ -194,6 +194,18 @@ details[open] > summary .disclosure-arrow { transform: rotate(90deg); }
 .board-topbar { display: flex; align-items: center; gap: 12px; }
 html.sidebar-collapsed .board-topbar { margin-bottom: 20px; }
 .topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Escape tabs on the non-board pages. Same rule as .tab-strip below: only while
+   the sidebar is collapsed, since an open sidebar is already a way out. */
+.nav-tabs { display: none; flex-wrap: wrap; gap: 4px; padding: 6px 24px 0; }
+html.sidebar-collapsed .nav-tabs { display: flex; }
+/* Hidden or not, these tabs sit between .board-utility and the board in the
+   DOM, and adjacency is structural rather than visual - so their mere presence
+   breaks the `.board-utility + .board-section` rule that tightens the top
+   padding. Restated here for both states: the 8px that rule would have given
+   when the strip is hidden, and a little more when it isn't. */
+.nav-tabs + .board-section { padding-top: 8px; }
+html.sidebar-collapsed .nav-tabs + .board-section { padding-top: 10px; }
+
 .tab-strip { display: none; flex-wrap: wrap; gap: 4px; }
 html.sidebar-collapsed .tab-strip { display: flex; }
 .subtab-strip { display: none; flex-wrap: wrap; gap: 4px; }

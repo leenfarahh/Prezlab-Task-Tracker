@@ -70,7 +70,7 @@
             <button type="button" class="sidebar-task"
                     hx-get="/partials/task-detail-modal?task_id={{ t.id }}&workstream={{ w.id }}&project={{ p.id }}"
                     hx-target="#modal-root" hx-swap="innerHTML">
-              <span class="status-dot" style="background-color: {{ t.dot_color }};"></span>
+              <span class="status-dot" style="background-color: {{ t.dot_color }} ;"></span>
               <span class="sidebar-task-title">{{ t.title }}</span>
             </button>
             {% endfor %}

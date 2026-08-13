@@ -219,9 +219,20 @@ def build_activity_context(user_id: str) -> dict:
 
 def build_sidebar_context(active_workstream: str, active_project: str = "all") -> dict:
     if active_workstream in ("archived", "archived_projects", "archived_workstreams"):
-        # These views aren't filtered by active workstream, so the picker
-        # doesn't apply there - skip fetching data it won't use.
-        return {"workstreams": [], "active_workstream": active_workstream, "active_project": active_project}
+        # These views aren't filtered by active workstream, so the sidebar's
+        # tree doesn't apply - skip the projects and tasks it would need.
+        #
+        # nav_workstreams is still loaded, and is the one thing these pages do
+        # need: it feeds the tab strip that gets you back out (see
+        # partials/nav_tabs.html). Without it these were the hardest pages in
+        # the app to leave - the tree is empty here, so even opening the sidebar
+        # showed no workstream to click.
+        return {
+            "workstreams": [],
+            "nav_workstreams": fetch_workstreams(),
+            "active_workstream": active_workstream,
+            "active_project": active_project,
+        }
 
     prefetch(fetch_workstreams, fetch_projects, fetch_tasks)
     workstreams = fetch_workstreams()
@@ -240,7 +251,14 @@ def build_sidebar_context(active_workstream: str, active_project: str = "all") -
             w_tasks.extend(p["tasks"])
         w["projects"] = w_projects
         w["segments"] = health_strip_segments(w_tasks)
-    return {"workstreams": workstreams, "active_workstream": active_workstream, "active_project": active_project}
+    # Same list under both keys here: the tree and the tab strip want the same
+    # workstreams, and only the archived branch above has to build them apart.
+    return {
+        "workstreams": workstreams,
+        "nav_workstreams": workstreams,
+        "active_workstream": active_workstream,
+        "active_project": active_project,
+    }
 
 
 def build_board_context(active_workstream: str, active_project: str) -> dict:

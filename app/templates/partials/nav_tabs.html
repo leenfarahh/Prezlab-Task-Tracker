@@ -1,0 +1,17 @@
+{# Way back into the tree from the pages that aren't a live board: the three
+   archived lists, activity, team and profiles.
+
+   Shown only while the sidebar is collapsed, matching board.html's .tab-strip -
+   an open sidebar is already a way out, so these would just be a second copy of
+   it. board.html's own strip doesn't cover these pages: it renders for live
+   boards only.
+
+   Workstreams only, not projects - a workstream lands you on its board, which
+   lists its projects as subtabs, whereas every project in the app as one flat
+   strip would be unreadable at any real size. #}
+<nav class="nav-tabs" aria-label="Back to workstreams">
+  <a href="/?workstream=all" class="tab">&#8592; All workstreams</a>
+  {% for w in nav_workstreams %}
+  <a href="/?workstream={{ w.id }}" class="tab">{{ w.name }}</a>
+  {% endfor %}
+</nav>
