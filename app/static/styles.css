@@ -167,22 +167,33 @@ details[open] > summary .disclosure-arrow { transform: rotate(90deg); }
 .board-section { padding: 16px 24px; }
 
 /* Always-present strip above the board. Holds the sidebar-expand button (which
-   only shows while collapsed) and the profile shortcut, so reaching your
-   profile never depends on the sidebar being open. */
-.board-utility { display: flex; align-items: center; gap: 12px; padding: 12px 24px 0; }
+   only shows while collapsed), the board's create actions, and the profile
+   shortcut, so reaching your profile never depends on the sidebar being open. */
+.board-utility { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 24px 0; }
 .board-utility .sidebar-expand-btn { margin: 0; }
 /* Absorb the strip's height so the board doesn't get pushed down a full row. */
 .board-utility + .board-section { padding-top: 8px; }
+/* Everything that belongs at the right edge - the create actions and the
+   profile shortcut - travels as one group. Grouping them in the markup rather
+   than giving each its own auto margin is deliberate: two auto margins in the
+   same flex row SPLIT the free space between them instead of pooling it, which
+   left the create buttons stranded in the middle of the strip. One margin on
+   one wrapper has no such failure mode, and it holds whether or not the create
+   buttons render (team, profile and archived views only get the avatar). */
+.utility-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 /* Wrapper only - the avatar inside carries the shape, matching how the same
    photo/initials pair is rendered on task cards and the team list. */
-.profile-btn { margin-left: auto; flex-shrink: 0; display: flex; border-radius: 999px; text-decoration: none; }
+.profile-btn { flex-shrink: 0; display: flex; border-radius: 999px; text-decoration: none; }
 .profile-btn:hover { filter: brightness(1.15); }
 .profile-avatar { margin-left: 0; width: 32px; height: 32px; font-size: 12px; }
 .profile-avatar-img { width: 32px; height: 32px; border-radius: 999px; object-fit: cover; }
 
-.board-topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.board-topbar .btn-primary { margin-left: auto; }
-.topbar-actions { display: flex; gap: 8px; margin-left: auto; }
+/* Tab strips only, and both are hidden while the sidebar is open - so this row
+   collapses to nothing most of the time and only claims its bottom margin when
+   there's actually a strip in it to separate from the board. */
+.board-topbar { display: flex; align-items: center; gap: 12px; }
+html.sidebar-collapsed .board-topbar { margin-bottom: 20px; }
+.topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tab-strip { display: none; flex-wrap: wrap; gap: 4px; }
 html.sidebar-collapsed .tab-strip { display: flex; }
 .subtab-strip { display: none; flex-wrap: wrap; gap: 4px; }

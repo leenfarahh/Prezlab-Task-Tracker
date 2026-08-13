@@ -79,7 +79,7 @@ Same as the JS version: share a deployed preview link for round 1, collect feedb
 
 ## New task from text
 
-The board's "+" menu has a second entry alongside the normal new-task form: paste or type a note in plain language ("Review the Acme deck by Friday, ask Sanad to fix the budget slide") and it comes back as one or more pre-filled task drafts.
+The strip above the board — top right, next to your profile avatar — carries a second button alongside the normal new-task form: paste or type a note in plain language ("Review the Acme deck by Friday, ask Sanad to fix the budget slide") and it comes back as one or more pre-filled task drafts.
 
 How it works: `app/gemini_client.py` sends the note to Gemini along with the current list of project and teammate ids, and asks for structured JSON back (title, description, priority, due date, project, assignee). `app/routers/nl_task_router.py` then re-validates every id against the real lists before anything is shown, so a hallucinated project or assignee id is dropped rather than trusted.
 

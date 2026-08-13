@@ -14,6 +14,9 @@
             re-renders the board the user is actually looking at. #}
          data-workstream="{{ active_workstream }}" data-project="{{ active_project }}"
          hx-get="/partials/board?workstream={{ active_workstream }}&project={{ active_project }}" hx-trigger="every 5s" hx-swap="morph">
+  {# Tab strips only, since the create buttons moved up to the utility strip in
+     dashboard.html. Both strips are hidden unless the sidebar is collapsed, so
+     this row is usually empty - the CSS drops its bottom margin to match. #}
   {% if active_workstream != "archived" %}
   <div class="board-topbar">
     {% if scoped_workstream %}
@@ -32,43 +35,28 @@
       {% endfor %}
     </div>
     {% endif %}
-
-    <div class="topbar-actions">
-      {% if show_new_workstream %}
-      <button class="btn-primary"
-              hx-get="/partials/new-workstream-modal"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        + New workstream
-      </button>
-      {% elif show_new_project %}
-      <button class="btn-primary"
-              hx-get="/partials/new-project-modal?workstream_id={{ scoped_workstream.id }}"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        + New project
-      </button>
-      {% elif show_new_task %}
-      <button class="btn-primary"
-              hx-get="/partials/new-task-modal?project_id={{ active_project }}&active_workstream={{ active_workstream }}"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        + New task
-      </button>
-      {% endif %}
-      <button class="btn-ghost"
-              hx-get="/partials/new-task-text-modal?active_workstream={{ active_workstream }}&active_project={{ active_project }}"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        + New task from text
-      </button>
-    </div>
   </div>
   {% endif %}
 
   {% if scoped_workstream or active_workstream == "archived" %}
   <div class="board-header">
     <h1>{{ board_title }}</h1>
+    {# Edits whatever the heading names, so the branches follow the same order
+       data.py uses to pick board_title: a project once one is selected,
+       otherwise the workstream - which covers both its "All" and "By user"
+       views, since neither sets scoped_project. The archived board reaches this
+       block with neither set and correctly gets no button; it's a history view,
+       and "Archived tasks" isn't an editable record. #}
     {% if scoped_project %}
     <button type="button" class="link-muted"
             hx-get="/partials/edit-project-modal?project_id={{ scoped_project.id }}&active_workstream={{ active_workstream }}&active_project={{ active_project }}"
-            hx-target="#modal-root" hx-swap="innerHTML">
+            hx-target="#modal-root" hx-swap="innerHTML" title="Edit project">
+      Edit
+    </button>
+    {% elif scoped_workstream %}
+    <button type="button" class="link-muted"
+            hx-get="/partials/edit-workstream-modal?workstream_id={{ scoped_workstream.id }}&active_workstream={{ active_workstream }}"
+            hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">
       Edit
     </button>
     {% endif %}

@@ -8,12 +8,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  {# ?v=<mtime>, so a CSS or JS edit is a new URL the browser can't serve from
+     cache. See app/asset_version.py - a stale stylesheet against fresh markup
+     doesn't just lose the change, it renders new elements entirely unstyled. #}
+  <link rel="stylesheet" href="{{ asset_url('styles.css') }}" />
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
   {# After htmx, and deferred like it: dnd.js calls htmx.ajax on drop, and
      deferred scripts run in document order. #}
-  <script src="/static/dnd.js" defer></script>
+  <script src="{{ asset_url('dnd.js') }}" defer></script>
   <script>
     if (localStorage.getItem('sidebarCollapsed') === '1') {
       document.documentElement.classList.add('sidebar-collapsed');

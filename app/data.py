@@ -174,6 +174,11 @@ def build_board_context(active_workstream: str, active_project: str) -> dict:
         "show_new_workstream": not show_archived and not scoped_workstream,
         "show_new_project": bool(scoped_workstream) and active_project == "all",
         "show_new_task": bool(scoped_project),
+        # The create buttons render in dashboard.html's utility strip, which is
+        # shared with the team, profile and archived-list pages - none of which
+        # call this function. This says "the page below is a live board", so
+        # those pages leave the key undefined and the strip stays as it was.
+        "show_board_actions": not show_archived,
         "profiles": profiles,
         "flagged_ids": set(),
         "tab_workstreams": workstreams,

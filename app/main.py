@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from app import fragments
+from app.asset_version import asset_url
 from app.config import SESSION_SECRET
 from app.request_cache import RequestCacheMiddleware
 from app.routers import (
@@ -18,6 +20,23 @@ from app.routers import (
 
 app = FastAPI(title="Prezlab AI Team Tracker")
 templates = Jinja2Templates(directory="app/templates")
+
+# Each module that renders builds its own Jinja2Templates, and Jinja globals are
+# per-Environment, so asset_url() has to be registered on every one of them.
+# Anything new that renders base.html must be added here, or the template will
+# raise "asset_url is undefined" at render time.
+for _templates in (
+    templates,
+    fragments.templates,
+    auth_router.templates,
+    board_router.templates,
+    nl_task_router.templates,
+    project_router.templates,
+    tasks_router.templates,
+    user_router.templates,
+    workstream_router.templates,
+):
+    _templates.env.globals["asset_url"] = asset_url
 
 # Signed session cookie carrying {id, email, full_name} only - see app/supabase_client.py
 # for the reasoning on why this app does not carry raw Supabase JWTs around per-request.

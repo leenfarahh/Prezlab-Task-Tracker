@@ -15,6 +15,43 @@
   <div class="board-wrap">
     <div class="board-utility">
       <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
+      {# Create actions sit here rather than in the board's own topbar so they
+         land next to the profile shortcut, and both are wrapped together so a
+         single auto margin carries the pair to the right edge. Only one of the
+         first three applies at a time: which "+ New ..." you get depends on how
+         far into the tree the current view is scoped. Note this strip is outside
+         #board-container and so isn't touched by the 5s poll - fine, because
+         every flag below is derived from the workstream/project in the URL,
+         which only changes on a full page load. #}
+      <div class="utility-right">
+      {% if show_board_actions %}
+      <div class="topbar-actions">
+        {% if show_new_workstream %}
+        <button class="btn-primary"
+                hx-get="/partials/new-workstream-modal"
+                hx-target="#modal-root" hx-swap="innerHTML">
+          + New workstream
+        </button>
+        {% elif show_new_project %}
+        <button class="btn-primary"
+                hx-get="/partials/new-project-modal?workstream_id={{ scoped_workstream.id }}"
+                hx-target="#modal-root" hx-swap="innerHTML">
+          + New project
+        </button>
+        {% elif show_new_task %}
+        <button class="btn-primary"
+                hx-get="/partials/new-task-modal?project_id={{ active_project }}&active_workstream={{ active_workstream }}"
+                hx-target="#modal-root" hx-swap="innerHTML">
+          + New task
+        </button>
+        {% endif %}
+        <button class="btn-ghost"
+                hx-get="/partials/new-task-text-modal?active_workstream={{ active_workstream }}&active_project={{ active_project }}"
+                hx-target="#modal-root" hx-swap="innerHTML">
+          + New task from text
+        </button>
+      </div>
+      {% endif %}
       {% if viewer %}
       <a href="/users/{{ viewer.id }}" class="profile-btn" title="{{ viewer.full_name }}">
         {% if viewer.avatar_url %}
@@ -24,6 +61,7 @@
         {% endif %}
       </a>
       {% endif %}
+      </div>
     </div>
     {% include board_template %}
   </div>
