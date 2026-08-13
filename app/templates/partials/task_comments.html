@@ -1,0 +1,56 @@
+{# The task detail modal's comment thread. Rendered inline with the modal on
+   open, and returned on its own by the two comment routes - which is why the
+   wrapper carries the id they swap against (hx-swap="outerHTML" replaces this
+   whole element, composer included, so the textarea comes back empty). #}
+<div class="task-comments" id="task-comments">
+  <p class="eyebrow">{{ comments|length }} comment{{ 's' if comments|length != 1 else '' }}</p>
+
+  {% if comments %}
+  <ul class="comment-list">
+    {% for c in comments %}
+    <li class="comment">
+      {# Same avatar pair as task cards and the team list: photo when there is
+         one, coloured initials otherwise. author is None only if the profile
+         was removed out from under the comment. #}
+      {% if c.author and c.author.avatar_url %}
+      <img src="{{ c.author.avatar_url }}" alt="{{ c.author.full_name }}" class="comment-avatar-img" />
+      {% elif c.author %}
+      <span class="avatar comment-avatar" style="background-color: {{ c.author.avatar_color }};">{{ c.author.initials }}</span>
+      {% else %}
+      <span class="avatar comment-avatar" style="background-color: var(--muted-faint);">?</span>
+      {% endif %}
+
+      <div class="comment-main">
+        <p class="comment-meta">
+          <span class="comment-author">{{ c.author.full_name if c.author else "Unknown" }}</span>
+          <span class="comment-time">{{ c.created_display }}</span>
+        </p>
+        <p class="comment-text">{{ c.body }}</p>
+      </div>
+
+      {# Author-only, and the route re-checks it - this just hides a button that
+         would always no-op. A task's owner deliberately can't delete someone
+         else's remark. #}
+      {% if c.author_id == current_user_id %}
+      <button type="button" class="comment-delete"
+              hx-post="/comments/{{ c.id }}/delete"
+              hx-vals='{"task_id": "{{ task_id }}"}'
+              hx-target="#task-comments" hx-swap="outerHTML"
+              title="Delete your comment" aria-label="Delete your comment">&times;</button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="comment-empty">No comments yet.</p>
+  {% endif %}
+
+  {# A real <form> rather than a button with hx-include: this sits beside the
+     edit form in the modal, not inside it, so nesting isn't a concern and the
+     native `required` check applies before htmx posts. #}
+  <form class="comment-compose" hx-post="/tasks/{{ task_id }}/comments"
+        hx-target="#task-comments" hx-swap="outerHTML">
+    <textarea name="body" rows="2" required placeholder="Add a comment…"></textarea>
+    <button type="submit" class="btn-primary">Comment</button>
+  </form>
+</div>

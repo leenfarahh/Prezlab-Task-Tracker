@@ -93,6 +93,24 @@ Every status column is ordered by due date, soonest first, with undated tasks at
 
 Dragging is enabled only on the status-grouped board. The "by user" columns are people rather than statuses, and the archived board is a history view, so cards in both stay click-to-edit. Client side lives in `app/static/dnd.js`.
 
+## Comments
+
+Every task carries a comment thread at the bottom of its edit modal, stored in `task_comments` (`supabase/schema.sql`).
+
+The permission rule here is deliberately **not** the one the rest of the task routes use. Editing, archiving, deleting, and dragging a task are all creator-or-assignee only (`_task_owner_denial`), but **any signed-in teammate can comment on any task** — that's the point of the feature, since commenting is how you raise a question on work that isn't yours. Deleting a comment is restricted to that comment's own author, enforced as part of the delete filter (`.eq("id", …).eq("author_id", …)`) rather than by reading the row first, so there's no gap between the check and the write. A task's owner cannot delete a teammate's remark.
+
+Posting or deleting re-renders only the thread (`#task-comments`), not the board — comments don't change anything the board draws, and a full refresh would close the modal and discard whatever was half-typed in the edit form above. Comments are hard-deleted along with their task via `on delete cascade`.
+
+## Notifications and the activity page
+
+A bell in the top bar shows how many comments on **your** tasks you haven't seen. "Your tasks" is the same creator-or-assignee rule used everywhere else. Your own comments never count — commenting on your own task can't light up your own bell.
+
+The bell loads and refreshes itself (`hx-trigger="load, every 20s"` on the wrapper in `dashboard.html`) rather than being handed a count. That top strip is shared by every page — board, team, profile, archived, activity — each rendered by a different route, so threading a count through context would mean touching all of them and remembering to on the next one.
+
+`/activity` lists those comments newest-first, entries you hadn't seen yet tinted. **It is private.** The route takes no user id at all and builds the feed for whoever is in the session, so there is no `/users/{id}/activity` and no id to swap for a teammate's — the privacy comes from the route's shape rather than from a check a later edit could drop. Nobody can see anyone else's activity.
+
+Unread is tracked by one watermark per person, `profiles.comments_seen_at`; opening `/activity` pushes it to `now()`. The bump happens *after* the response is rendered, so the page you're looking at still highlights what was new — that highlight survives exactly one visit. Two consequences worth knowing: the watermark is a single timestamp, not per-comment read state, so opening the page marks *everything* read at once; and archived tasks are excluded, since their comments are history and including them would cost a second query on every bell poll.
+
 ## Auth model
 
 There is no identity verification: entering an allow-listed address and submitting logs you in as that address, no code, no password, no proof you own it. Access is gated by `ALLOWED_LOGIN_EMAILS` — an explicit comma-separated list in the environment, which replaced the earlier "any `@prezlab.com` address" domain check. That's only acceptable because this app is reachable solely on the enterprise network, not the public internet - never widen the allow-list to a whole domain or expose this app publicly without adding real verification back.

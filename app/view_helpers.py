@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 STATUS_ORDER = ["backlog", "in_progress", "at_risk", "blocked", "in_review", "done"]
 
@@ -61,6 +61,56 @@ def format_due_date(iso_date: str) -> str:
     d = date.fromisoformat(iso_date)
     suffix = "" if d.year == date.today().year else f", {d.year}"
     return f"{d.strftime('%b')} {d.day}{suffix}"
+
+
+def parse_timestamp(iso_ts: str) -> datetime | None:
+    """Supabase timestamptz string -> aware datetime, or None if unparseable.
+
+    Exists so timestamps are never compared as strings. Postgres trims trailing
+    zeros from the fractional seconds, so "…:00+00:00" and "…:00.5+00:00" are
+    both valid renderings of times half a second apart, and lexicographic order
+    is not reliably chronological across them.
+
+    A "Z" suffix only parses natively from Python 3.11, so it is normalised
+    first, and a value that somehow arrives naive is treated as UTC - which is
+    what the column stores.
+    """
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def format_timestamp(iso_ts: str) -> str:
+    """A comment's created_at as "just now" / "12m ago" / "3h ago" / "Aug 13".
+
+    Relative while a thread is live (which is when "5m ago" is the useful fact)
+    and absolute once it isn't, falling back to the same "Aug 13" shape
+    format_due_date uses so dates read consistently across the app.
+
+    The comparison stays in UTC and only the final display converts to local
+    time, since subtracting a naive from an aware datetime would raise.
+    """
+    dt = parse_timestamp(iso_ts)
+    if dt is None:
+        return ""
+
+    seconds = (datetime.now(timezone.utc) - dt).total_seconds()
+    # Negative when the database clock is a touch ahead of this process, which
+    # happens on the row that was just inserted - "just now" is right for it.
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h ago"
+    if seconds < 604800:
+        return f"{int(seconds // 86400)}d ago"
+
+    local = dt.astimezone()
+    suffix = "" if local.year == date.today().year else f", {local.year}"
+    return f"{local.strftime('%b')} {local.day}{suffix}"
 
 
 def initials(full_name: str) -> str:

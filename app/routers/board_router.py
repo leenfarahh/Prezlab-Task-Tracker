@@ -10,6 +10,8 @@ from app.data import (
     build_sidebar_context,
     fetch_profiles,
     fetch_task,
+    fetch_task_comment_rows,
+    fetch_task_comments,
     prefetch,
 )
 from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
@@ -133,20 +135,28 @@ def task_detail_modal(request: Request, task_id: str, workstream: str = "all", p
     # then the task row. Neither depends on the other, so they go together.
     # Gated on there being a session at all (a cookie read, no I/O), so an
     # anonymous request still does zero database work before being redirected.
+    # The comment rows join the same fan-out - a third independent read, so it
+    # costs no extra wall clock. fetch_task_comment_rows (the query half) rather
+    # than fetch_task_comments (which also reads profiles): see its docstring
+    # for why the enriching half must not run inside a prefetch worker.
     if current_user(request):
-        prefetch(fetch_profiles, lambda: fetch_task(task_id))
+        prefetch(fetch_profiles, lambda: fetch_task(task_id), lambda: fetch_task_comment_rows(task_id))
 
     redirect = require_login(request)
     if redirect:
         return redirect
     task = fetch_task(task_id)
+    user = current_user(request)
     ctx = {
         "request": request,
         "task": task,
+        "task_id": task_id,
         "active_workstream": workstream,
         "active_project": project,
         "status_order": STATUS_ORDER,
         "status_label": STATUS_LABEL,
         "profiles": list(fetch_profiles().values()),
+        "comments": fetch_task_comments(task_id),
+        "current_user_id": user["id"],
     }
     return templates.TemplateResponse("partials/task_detail_modal.html", ctx)

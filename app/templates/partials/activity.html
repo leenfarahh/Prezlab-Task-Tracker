@@ -1,0 +1,52 @@
+{# The /activity page body, rendered as dashboard.html's board_template like
+   every other non-board page. Private to whoever is signed in - the route takes
+   no user id at all, so there is nothing to tamper with. #}
+<section class="board-section">
+  <div class="board-header">
+    <h1>Activity</h1>
+  </div>
+
+  <p class="activity-intro">
+    Comments on tasks you created or are assigned. Only you can see this page.
+  </p>
+
+  {% if events %}
+  <ul class="activity-list">
+    {% for e in events %}
+    {# Unread is computed against the watermark captured before this page load
+       bumped it, so the highlight survives exactly one visit - which is the
+       visit that earned it. #}
+    <li class="activity-item{{ ' activity-unread' if e.is_unread else '' }}">
+      {% if e.author and e.author.avatar_url %}
+      <img src="{{ e.author.avatar_url }}" alt="{{ e.author.full_name }}" class="comment-avatar-img" />
+      {% elif e.author %}
+      <span class="avatar comment-avatar" style="background-color: {{ e.author.avatar_color }};">{{ e.author.initials }}</span>
+      {% else %}
+      <span class="avatar comment-avatar" style="background-color: var(--muted-faint);">?</span>
+      {% endif %}
+
+      <div class="comment-main">
+        <p class="comment-meta">
+          <span class="comment-author">{{ "You" if e.is_own else (e.author.full_name if e.author else "Unknown") }}</span>
+          <span class="activity-on">commented on</span>
+          {# Opens the same task modal the board opens, scoped to the task's own
+             workstream/project so closing it lands somewhere coherent. #}
+          <button type="button" class="activity-task-link"
+                  hx-get="/partials/task-detail-modal?task_id={{ e.task.id }}&workstream={{ e.workstream_id }}&project={{ e.task.project_id }}"
+                  hx-target="#modal-root" hx-swap="innerHTML">{{ e.task.title }}</button>
+          <span class="comment-time">{{ e.created_display }}</span>
+        </p>
+        {% if e.project %}
+        <p class="activity-project">{{ e.project.name }}</p>
+        {% endif %}
+        <p class="comment-text">{{ e.body }}</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="comment-empty">
+    Nothing yet. Comments on tasks you created or are assigned will show up here.
+  </p>
+  {% endif %}
+</section>

@@ -7,6 +7,8 @@ from app.view_helpers import (
     STATUS_ORDER,
     date_buckets,
     format_due_date,
+    format_timestamp,
+    parse_timestamp,
     group_by_assignee,
     group_by_status,
     health_strip_segments,
@@ -56,6 +58,47 @@ def fetch_task(task_id: str) -> dict:
     return _memo(f"task:{task_id}", load)
 
 
+def fetch_task_comment_rows(task_id: str) -> list[dict]:
+    """The raw comment rows for a task, oldest first.
+
+    Split from fetch_task_comments below so this half - the part that actually
+    hits the network - can be handed to prefetch(). The enriching half calls
+    fetch_profiles(), and running that inside a prefetch worker would race the
+    sibling worker already loading profiles: memo() has no lock, so both would
+    miss and issue the same query. Prefetch this one; call the other after.
+    """
+
+    def load():
+        return (
+            get_service_client()
+            .table("task_comments")
+            .select("*")
+            .eq("task_id", task_id)
+            .order("created_at")
+            .execute()
+            .data
+        )
+
+    return _memo(f"task_comments:{task_id}", load)
+
+
+def fetch_task_comments(task_id: str) -> list[dict]:
+    """This task's comments, oldest first, each with its author and a display
+    timestamp attached.
+
+    Authors are resolved against the memoized profiles map rather than joined,
+    so ten comments from three people still cost one read. Enrichment sits
+    outside the memo because it is cheap and idempotent, which keeps the cached
+    value a plain copy of the row.
+    """
+    rows = fetch_task_comment_rows(task_id)
+    profiles = fetch_profiles()
+    for r in rows:
+        r["author"] = profiles.get(r["author_id"])
+        r["created_display"] = format_timestamp(r["created_at"])
+    return rows
+
+
 def fetch_tasks(archived: bool = False) -> list[dict]:
     def load():
         return (
@@ -69,6 +112,109 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
         )
 
     return _memo(f"tasks:{archived}", load)
+
+
+# ---------- Comment activity ----------
+# "Your tasks" throughout this section means the same creator-or-assignee rule
+# the task write guard uses (_task_owner_denial in app/routers/tasks_router.py),
+# so the feed covers exactly the tasks you are answerable for.
+#
+# Everything here is scoped to one user id, which the routes take from the
+# session and never from a URL - there is no way to ask for someone else's.
+
+ACTIVITY_LIMIT = 100
+
+
+def _my_tasks(user_id: str) -> dict[str, dict]:
+    """The live tasks this person created or is assigned, keyed by id.
+
+    Archived tasks are deliberately out of scope: their comments are history,
+    and pulling them in would cost a second tasks read on every bell poll for
+    notifications nobody is going to act on.
+    """
+    return {t["id"]: t for t in fetch_tasks() if user_id in (t.get("created_by"), t.get("assignee_id"))}
+
+
+def _activity_rows(user_id: str, task_ids: list[str]) -> list[dict]:
+    """Newest comments on the given tasks, raw rows, capped at ACTIVITY_LIMIT."""
+    if not task_ids:
+        return []
+
+    def load():
+        return (
+            get_service_client()
+            .table("task_comments")
+            .select("*")
+            .in_("task_id", task_ids)
+            .order("created_at", desc=True)
+            .limit(ACTIVITY_LIMIT)
+            .execute()
+            .data
+        )
+
+    return _memo(f"comment_activity:{user_id}", load)
+
+
+def _is_unread(row: dict, user_id: str, seen_at) -> bool:
+    """Someone else's comment, newer than this person's read watermark."""
+    if row.get("author_id") == user_id:
+        return False
+    created = parse_timestamp(row.get("created_at"))
+    if created is None:
+        return False
+    return seen_at is None or created > seen_at
+
+
+def count_unread_comments(user_id: str) -> int:
+    """Just the badge number, for the notification bell.
+
+    Kept separate from build_activity_context so the poll doesn't pay for the
+    project lookup and per-row enrichment that only the page renders.
+    """
+    profile = fetch_profiles().get(user_id) or {}
+    seen_at = parse_timestamp(profile.get("comments_seen_at"))
+    rows = _activity_rows(user_id, list(_my_tasks(user_id)))
+    return sum(1 for r in rows if _is_unread(r, user_id, seen_at))
+
+
+def build_activity_context(user_id: str) -> dict:
+    """The activity feed: comments on this person's tasks, newest first.
+
+    Their own comments are included - the page is a record of the conversation
+    on their work, not only of what other people said - but they never count as
+    unread, so commenting on your own task can't light up your own bell.
+    """
+    profile = fetch_profiles().get(user_id) or {}
+    seen_at = parse_timestamp(profile.get("comments_seen_at"))
+    my_tasks = _my_tasks(user_id)
+    rows = _activity_rows(user_id, list(my_tasks))
+
+    profiles = fetch_profiles()
+    projects_by_id = {p["id"]: p for p in fetch_projects()}
+
+    events = []
+    for r in rows:
+        task = my_tasks.get(r["task_id"])
+        if task is None:
+            continue  # task archived or reassigned between the two reads
+        project = projects_by_id.get(task["project_id"])
+        events.append(
+            {
+                **r,
+                "author": profiles.get(r["author_id"]),
+                "created_display": format_timestamp(r["created_at"]),
+                "task": task,
+                "project": project,
+                "workstream_id": project["workstream_id"] if project else "all",
+                "is_own": r.get("author_id") == user_id,
+                "is_unread": _is_unread(r, user_id, seen_at),
+            }
+        )
+
+    return {
+        "events": events,
+        "unread_count": sum(1 for e in events if e["is_unread"]),
+    }
 
 
 def build_sidebar_context(active_workstream: str, active_project: str = "all") -> dict:

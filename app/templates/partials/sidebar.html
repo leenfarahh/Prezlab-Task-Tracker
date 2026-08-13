@@ -97,8 +97,13 @@
     Archived workstreams
   </a>
 
-  <a href="/users/{{ request.session.user.id }}"     class="sidebar-item {{ 'active' if active_workstream == 'profile' else '' }}"
+  {# Grouped with My profile rather than with the shared views above, because
+     both are personal: this feed is built for the signed-in user only. #}
+  <a href="/activity"     class="sidebar-item {{ 'active' if active_workstream == 'activity' else '' }}"
      style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
+    Activity
+  </a>
+  <a href="/users/{{ request.session.user.id }}"     class="sidebar-item {{ 'active' if active_workstream == 'profile' else '' }}">
     My profile
   </a>
 

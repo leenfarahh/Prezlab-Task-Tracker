@@ -1,11 +1,15 @@
+{# The card is a <div> holding two sibling forms, not one <form> wrapping
+   everything: the comment composer is its own form (it posts to its own route
+   and swaps only the thread), and HTML forbids nesting one form in another. #}
 <div class="modal-backdrop" id="modal-root-inner" onclick="if(event.target === this) htmx.trigger('#modal-close-detail', 'click')">
-  <form class="modal-card" hx-post="/tasks/{{ task.id }}" hx-target="#modal-root" hx-swap="innerHTML" onclick="event.stopPropagation()">
+  <div class="modal-card modal-card-detail" onclick="event.stopPropagation()">
     <div class="modal-head">
       <p class="eyebrow">Edit task</p>
       <button type="button" id="modal-close-detail" class="icon-btn modal-close" aria-label="Close"
               hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">&times;</button>
     </div>
 
+    <form hx-post="/tasks/{{ task.id }}" hx-target="#modal-root" hx-swap="innerHTML">
     <input type="hidden" name="active_workstream" value="{{ active_workstream }}" />
     <input type="hidden" name="active_project" value="{{ active_project }}" />
     <input name="title" required value="{{ task.title }}" autofocus />
@@ -66,5 +70,10 @@
       </details>
       <button type="submit" class="btn-primary">Save changes</button>
     </div>
-  </form>
+    </form>
+
+    {# Open to every teammate, not just this task's creator or assignee - see
+       add_task_comment in app/routers/tasks_router.py. #}
+    {% include "partials/task_comments.html" %}
+  </div>
 </div>

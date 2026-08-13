@@ -482,6 +482,114 @@ body.dragging .task-card { pointer-events: none; }
 .modal-menu-item:hover { background: var(--hover-tint); }
 .modal-menu-item.danger { color: var(--blocked); }
 
+/* Notification bell in the top bar. The wrapper is always present (it carries
+   the poll) and is empty until the first response lands, so it holds its own
+   width to stop the avatar beside it shifting when the bell appears. */
+.notif-bell { flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; }
+.bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.bell:hover { background: var(--hover-tint); color: var(--ink); }
+.bell-unread { color: var(--ink); }
+/* Sits on the bell's upper-right. Min-width plus a pill radius so "3" is a
+   circle and "99+" stretches into a lozenge instead of being clipped. */
+.bell-badge {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--blocked);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 15px;
+  text-align: center;
+  /* Matches the page behind it, so the badge reads as sitting above the bell. */
+  border: 1.5px solid var(--paper);
+}
+
+/* Activity feed (/activity). Reuses the comment avatar/text classes below so an
+   entry here and a comment in the task modal look like the same object. */
+.activity-intro { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.activity-item + .activity-item { border-top-color: var(--line); border-radius: 0 0 4px 4px; }
+/* Unread entries are tinted rather than badged: the whole row is the unit the
+   eye scans, and the tint survives being read at a glance from across a list. */
+.activity-unread { background: var(--active-tint); border-color: var(--line); }
+.activity-on { font-size: 12px; color: var(--muted); }
+.activity-project { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-faint); margin: 0 0 4px; }
+.activity-task-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.activity-task-link:hover { text-decoration: underline; }
+/* The meta line wraps on narrow screens - task titles are arbitrary length. */
+.activity-item .comment-meta { flex-wrap: wrap; }
+
+/* The detail modal carries a comment thread under the edit form, so it needs
+   more room than the default card and has to scroll once a thread gets long. */
+.modal-card-detail { max-width: 520px; max-height: 85vh; overflow-y: auto; }
+
+/* Task comments. Open to the whole team, unlike the edit form above them. */
+.task-comments { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
+.task-comments > .eyebrow { margin: 0 0 10px; }
+.comment-list { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.comment { display: flex; align-items: flex-start; gap: 8px; }
+.comment-avatar { width: 26px; height: 26px; font-size: 10px; flex-shrink: 0; margin-left: 0; }
+.comment-avatar-img { width: 26px; height: 26px; border-radius: 999px; object-fit: cover; flex-shrink: 0; }
+/* min-width:0 lets the text below actually wrap - a flex item defaults to
+   min-content width, which a long unbroken string would push straight past. */
+.comment-main { flex: 1; min-width: 0; }
+.comment-meta { display: flex; align-items: baseline; gap: 8px; margin: 0 0 2px; }
+.comment-author { font-size: 13px; font-weight: 600; color: var(--ink); }
+.comment-time { font-family: var(--font-mono); font-size: 10px; color: var(--muted-faint); }
+/* pre-wrap keeps the line breaks people type; break-word stops a pasted URL
+   from widening the whole modal. */
+.comment-text { margin: 0; font-size: 13px; color: var(--ink); white-space: pre-wrap; overflow-wrap: break-word; }
+.comment-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.comment-delete:hover { background: var(--hover-tint); color: var(--blocked); }
+.comment-empty { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.comment-compose { display: flex; align-items: flex-start; gap: 8px; }
+/* Beats .modal-card textarea, whose stacking margins don't suit a flex row. */
+.modal-card .comment-compose textarea { flex: 1; margin: 0; }
+.comment-compose .btn-primary { flex-shrink: 0; }
+
 /* One extracted task on the "new task from text" review screen. Unwanted drafts
    are deleted outright rather than deselected, so there's no opt-in checkbox -
    whatever is still on screen when Create is pressed is what gets written. */

@@ -9,6 +9,7 @@ from app.asset_version import asset_url
 from app.config import SESSION_SECRET
 from app.request_cache import RequestCacheMiddleware
 from app.routers import (
+    activity_router,
     auth_router,
     board_router,
     nl_task_router,
@@ -28,6 +29,7 @@ templates = Jinja2Templates(directory="app/templates")
 for _templates in (
     templates,
     fragments.templates,
+    activity_router.templates,
     auth_router.templates,
     board_router.templates,
     nl_task_router.templates,
@@ -48,6 +50,7 @@ app.add_middleware(RequestCacheMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+app.include_router(activity_router.router)
 app.include_router(auth_router.router)
 app.include_router(board_router.router)
 app.include_router(nl_task_router.router)

@@ -40,6 +40,16 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists role text;
 alter table public.profiles add column if not exists avatar_url text;
 
+-- Read watermark for the notification bell and the activity page: a comment on
+-- one of your tasks counts as unread if it is newer than this. Opening
+-- /activity pushes it to now().
+--
+-- `default now()` rather than null on purpose. Null would read as "never
+-- checked", so every profile that already exists when this runs would light up
+-- with a count of every historical comment on their tasks - a backlog nobody
+-- asked for. Defaulting to the migration time starts everyone clean.
+alter table public.profiles add column if not exists comments_seen_at timestamptz not null default now();
+
 -- Detach from auth.users and enforce one profile per email, for installs that
 -- ran an earlier version of this file (both are no-ops on a fresh project).
 alter table public.profiles drop constraint if exists profiles_id_fkey;
@@ -217,6 +227,31 @@ create trigger tasks_log_change
   after insert or update on public.tasks
   for each row execute procedure public.log_task_change();
 
+-- ---------- Comments ----------
+-- Discussion on a task, open to the whole team. Deliberately NOT restricted to
+-- the task's creator or assignee the way editing is (see _task_owner_denial in
+-- app/routers/tasks_router.py): anyone should be able to ask a question or
+-- leave context on someone else's task without being handed it first. Only the
+-- comment's own author can delete it.
+--
+-- Kept as its own table rather than a task_activity row with kind='commented':
+-- a comment is authored content with its own lifecycle, while task_activity is
+-- an append-only trail of system events written by a trigger. Mixing them would
+-- put user text under a jsonb detail column and make "delete my comment" a
+-- write into an audit log.
+
+create table if not exists public.task_comments (
+  id uuid primary key default gen_random_uuid(),
+  -- Tasks are hard-deleted (not just archived), so comments follow the task out.
+  task_id uuid not null references public.tasks (id) on delete cascade,
+  author_id uuid references public.profiles (id),
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Composite because every read is "this task's comments, oldest first".
+create index if not exists task_comments_task_idx on public.task_comments (task_id, created_at);
+
 -- ---------- Session refresh tokens ----------
 -- The signed cookie set on login (app/main.py) is a short-lived, in-memory
 -- session. This table backs a longer-lived refresh token in a second cookie,
@@ -272,6 +307,7 @@ alter table public.workstreams enable row level security;
 alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_activity enable row level security;
+alter table public.task_comments enable row level security;
 
 drop policy if exists "profiles readable by authenticated users" on public.profiles;
 create policy "profiles readable by authenticated users" on public.profiles
@@ -303,6 +339,10 @@ create policy "activity readable by authenticated users" on public.task_activity
 drop policy if exists "activity insertable by authenticated users" on public.task_activity;
 create policy "activity insertable by authenticated users" on public.task_activity
   for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "comments full access for authenticated users" on public.task_comments;
+create policy "comments full access for authenticated users" on public.task_comments
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- ---------- Realtime ----------
 -- Enables the dashboard to update live as tasks change status, which is the

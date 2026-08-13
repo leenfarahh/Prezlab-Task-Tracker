@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import fetch_profiles, fetch_task, prefetch
+from app.data import fetch_profiles, fetch_task, fetch_task_comments, prefetch
 from app.fragments import refreshed_fragments
 from app.supabase_client import get_service_client
 from app.view_helpers import STATUS_ORDER
@@ -193,6 +193,72 @@ def set_task_status(
     get_service_client().table("tasks").update({"status": status}).eq("id", task_id).execute()
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
+
+
+def _comments_fragment(request: Request, task_id: str) -> HTMLResponse:
+    """Re-renders only the comments block.
+
+    Comments don't change anything the board or sidebar draw, so these routes
+    return this instead of refreshed_fragments() - which would also close the
+    modal and throw away whatever the user had half-typed in the edit form
+    above. The block swaps itself by id and the modal stays put.
+    """
+    return HTMLResponse(
+        templates.get_template("partials/task_comments.html").render(
+            {
+                "request": request,
+                "task_id": task_id,
+                "comments": fetch_task_comments(task_id),
+                "current_user_id": current_user(request)["id"],
+            }
+        )
+    )
+
+
+@router.post("/tasks/{task_id}/comments", response_class=HTMLResponse)
+def add_task_comment(request: Request, task_id: str, body: str = Form(...)):
+    """Post a comment. Open to any logged-in teammate.
+
+    Deliberately require_login and NOT _guard: every other write below is
+    creator-or-assignee only, but commenting is how someone raises a question on
+    work that isn't theirs, so gating it on ownership would defeat the point.
+    """
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    user = current_user(request)
+
+    # The textarea is `required`, so an empty body means a hand-rolled post
+    # rather than a user mistake - drop it and re-render rather than error.
+    body = body.strip()
+    if body:
+        get_service_client().table("task_comments").insert(
+            {"task_id": task_id, "author_id": user["id"], "body": body[:4000]}
+        ).execute()
+
+    return _comments_fragment(request, task_id)
+
+
+@router.post("/comments/{comment_id}/delete", response_class=HTMLResponse)
+def delete_task_comment(request: Request, comment_id: str, task_id: str = Form(...)):
+    """Delete your own comment.
+
+    Anyone may comment, but only the author may remove one - a task's owner
+    can't delete a teammate's remark. Authorship is enforced as part of the
+    delete filter rather than by reading the row first: a delete matching
+    nothing is already a no-op, so this is one round trip instead of two with no
+    gap between the check and the write.
+    """
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    user = current_user(request)
+
+    get_service_client().table("task_comments").delete().eq("id", comment_id).eq(
+        "author_id", user["id"]
+    ).execute()
+
+    return _comments_fragment(request, task_id)
 
 
 @router.get("/partials/confirm-delete-task-modal", response_class=HTMLResponse)

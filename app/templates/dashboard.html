@@ -52,6 +52,14 @@
         </button>
       </div>
       {% endif %}
+      {# Loads and refreshes itself rather than being handed an unread count.
+         This strip is shared by every page (board, team, profile, archived,
+         activity), each rendered by a different route, so context-threading the
+         count would mean touching all of them and remembering to on the next
+         one. The wrapper keeps the poll attributes; only its contents swap. #}
+      <span id="notif-bell" class="notif-bell"
+            hx-get="/partials/notification-bell"
+            hx-trigger="load, every 20s" hx-swap="innerHTML"></span>
       {% if viewer %}
       <a href="/users/{{ viewer.id }}" class="profile-btn" title="{{ viewer.full_name }}">
         {% if viewer.avatar_url %}
