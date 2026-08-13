@@ -7,8 +7,72 @@
   </div>
 
   <p class="activity-intro">
-    Everything that's happened to tasks you created or are assigned. Only you can see this page.
+    Everything that's happened across the tracker - tasks, projects and workstreams.
+    Only you can see this page.
   </p>
+
+  {# A plain GET form, so every filtered view is its own URL that can be
+     bookmarked, shared with yourself, or reloaded. onchange submits so there's
+     no Apply step; the button is the no-JS fallback and hides itself when
+     scripting is on. #}
+  <form class="activity-filters" method="get" action="/activity">
+    {# Everything by default. "My tasks" narrows to events whose recorded
+       audience includes you - useful, but not the default, because that
+       audience is only as good as the underlying data: a task with no creator
+       and no assignee belongs to nobody and would vanish from every feed. #}
+    <label class="activity-filter">
+      <span>Show</span>
+      <select name="scope" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if filters.scope != 'mine' else '' }}>Everything</option>
+        <option value="mine" {{ 'selected' if filters.scope == 'mine' else '' }}>My tasks</option>
+      </select>
+    </label>
+
+    <label class="activity-filter">
+      <span>Person</span>
+      <select name="actor" onchange="this.form.submit()">
+        <option value="">Anyone</option>
+        {% for p in filter_profiles %}
+        <option value="{{ p.id }}" {{ 'selected' if filters.actor == p.id else '' }}>
+          {{ "You" if p.id == current_user_id else p.full_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="activity-filter">
+      <span>Activity</span>
+      <select name="kind" onchange="this.form.submit()">
+        <option value="">Anything</option>
+        {% for value, label in kind_labels.items() %}
+        <option value="{{ value }}" {{ 'selected' if filters.kind == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="activity-filter">
+      <span>Project</span>
+      <select name="project" onchange="this.form.submit()">
+        <option value="">All projects</option>
+        {% for p in filter_projects %}
+        <option value="{{ p.id }}" {{ 'selected' if filters.project == p.id else '' }}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="activity-filter">
+      <span>Sort</span>
+      <select name="sort" onchange="this.form.submit()">
+        <option value="newest" {{ 'selected' if filters.sort != 'oldest' else '' }}>Newest first</option>
+        <option value="oldest" {{ 'selected' if filters.sort == 'oldest' else '' }}>Oldest first</option>
+      </select>
+    </label>
+
+    <noscript><button type="submit" class="btn-ghost">Apply</button></noscript>
+    {% if any_filter %}
+    <a href="/activity" class="link-muted activity-filter-clear">Clear filters</a>
+    {% endif %}
+  </form>
 
   {% if events %}
   <ul class="activity-list">
@@ -22,12 +86,18 @@
       {% elif e.actor %}
       <span class="avatar comment-avatar" style="background-color: {{ e.actor.avatar_color }};">{{ e.actor.initials }}</span>
       {% else %}
-      <span class="avatar comment-avatar" style="background-color: var(--muted-faint);">?</span>
+      {# No actor: a backfilled entry from before the feed existed. projects and
+         workstreams have no created_by column, so this is genuinely unrecorded
+         rather than a person we failed to look up. A plain mark, not a "?"
+         avatar - that reads as an unidentified someone, when in fact there is
+         nobody to identify. #}
+      <span class="activity-mark" aria-hidden="true"></span>
       {% endif %}
 
       <div class="comment-main">
         <p class="comment-meta">
-          <span class="comment-author">{{ "You" if e.is_own else (e.actor.full_name if e.actor else "Someone") }}</span>
+          {% if e.actor %}
+          <span class="comment-author">{{ "You" if e.is_own else e.actor.full_name }}</span>
 
           {# One phrase per kind. Anything unrecognised falls through to a
              neutral verb rather than printing a raw enum at the user. #}
@@ -44,28 +114,47 @@
             {%- else %}updated
             {%- endif %}
           </span>
+          {% endif %}
 
-          {# Links to the task only while there is one to open. A deleted task
-             keeps its title from the snapshot but stops being a button, rather
-             than offering a link to an empty modal. #}
-          {% if e.task %}
+          {# Says what kind of thing this was, since "archived Prezo" reads very
+             differently depending on whether Prezo is a task or a workstream. #}
+          {% if e.entity_type != "task" %}<span class="activity-on">{{ e.entity_type }}</span>{% endif %}
+
+          {# Linked only while the thing still exists: a task opens its modal, a
+             project or workstream opens its board. Anything deleted keeps its
+             title from the snapshot but stops being a link, rather than
+             offering one that leads nowhere. #}
+          {% if e.entity_type == "task" and e.task %}
           <button type="button" class="activity-task-link"
                   hx-get="/partials/task-detail-modal?task_id={{ e.task.id }}&workstream={{ e.workstream_id }}&project={{ e.task.project_id }}"
                   hx-target="#modal-root" hx-swap="innerHTML">{{ e.title_display }}</button>
+          {% elif e.entity_type == "project" and e.project %}
+          <a class="activity-task-link" href="/?workstream={{ e.workstream_id }}&project={{ e.project.id }}">{{ e.title_display }}</a>
+          {% elif e.entity_type == "workstream" and e.entity_id %}
+          <a class="activity-task-link" href="/?workstream={{ e.entity_id }}">{{ e.title_display }}</a>
           {% else %}
           <span class="activity-task-gone">{{ e.title_display }}</span>
           {% endif %}
 
+          {# With no actor the verb has nowhere to sit in front, so it moves
+             after the name and goes passive: "project Task Tracker was created"
+             rather than "Someone created project Task Tracker". #}
+          {% if not e.actor %}
+          <span class="activity-on">was {{ e.kind if e.kind in ("created", "edited", "archived", "unarchived", "deleted") else "updated" }}</span>
+          {% endif %}
+
           {% if e.kind == "status_changed" and e.detail.to %}
           <span class="activity-on">to {{ status_label.get(e.detail.to, e.detail.to) }}</span>
-          {% elif e.kind == "assigned" %}
+          {% elif e.kind == "assigned" and e.actor %}
           <span class="activity-on">to {{ "you" if e.assignee and e.assignee.id == current_user_id else (e.assignee.full_name if e.assignee else "nobody") }}</span>
           {% endif %}
 
           <span class="comment-time">{{ e.created_display }}</span>
         </p>
 
-        {% if e.project_display %}
+        {# Context line for tasks only. On a project event the project IS the
+           thing named above, so this would just repeat the title back. #}
+        {% if e.entity_type == "task" and e.project_display %}
         <p class="activity-project">{{ e.project_display }}</p>
         {% endif %}
 
@@ -78,6 +167,12 @@
     </li>
     {% endfor %}
   </ul>
+  {% elif any_filter %}
+  {# Still distinct from the empty feed below - "nothing matches this filter"
+     and "nothing has happened yet" would otherwise look identical, and only the
+     first is fixable by the reader. No clear link here though: the one beside
+     the filters is a few pixels away and does the same job. #}
+  <p class="comment-empty">Nothing matches these filters.</p>
   {% else %}
   <p class="comment-empty">
     Nothing yet. Anything that happens to a task you created or are assigned shows up here.

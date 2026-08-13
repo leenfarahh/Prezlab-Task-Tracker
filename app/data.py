@@ -126,29 +126,57 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
 ACTIVITY_LIMIT = 100
 
 
-def _activity_rows(user_id: str) -> list[dict]:
-    """This person's newest activity rows, raw, capped at ACTIVITY_LIMIT.
+def _activity_rows(
+    user_id: str,
+    scope: str = "",
+    actor: str = "",
+    kind: str = "",
+    project: str = "",
+    sort: str = "newest",
+) -> list[dict]:
+    """Activity rows, raw, capped at ACTIVITY_LIMIT.
 
-    Filtered on the audience array each event was written with rather than by
-    joining back to tasks. That is what lets the feed keep showing events whose
-    task has since been deleted, and it freezes whose history an event belongs
-    to at the moment it happened - reassigning a task later doesn't retroactively
-    move its past out of the previous owner's feed.
+    scope="" is everything that has happened; scope="mine" narrows to events
+    whose audience includes this person - the task's creator, its assignee and
+    whoever acted, as recorded when it happened.
+
+    Everything is the default because the audience is only as good as the data
+    behind it. A task with no created_by and no assignee - seeded rows, or
+    anything imported - produces an event nobody is the audience for, so it
+    existed but appeared in no feed at all. Filtering by audience is offered as
+    a narrowing, not imposed as the only view.
+
+    Audience is still what "mine" filters on, rather than joining back to tasks:
+    that is what lets it keep showing events whose task has since been deleted,
+    and it freezes whose history an event belongs to at the moment it happened,
+    so reassigning a task later doesn't move its past out of the previous
+    owner's feed.
+
+    The page's filters are applied here, in the query, rather than to the
+    returned list. Filtering afterwards would only ever search the most recent
+    ACTIVITY_LIMIT events, so asking for "deleted" or for a quiet project would
+    come back empty whenever the cap had already been filled by newer, unrelated
+    rows - which reads as "nothing happened" rather than "nothing shown".
     """
 
     def load():
+        query = get_service_client().table("task_activity").select("*")
+        if scope == "mine":
+            query = query.contains("audience", [user_id])
+        if actor:
+            query = query.eq("actor_id", actor)
+        if kind:
+            query = query.eq("kind", kind)
+        if project:
+            query = query.eq("project_id", project)
         return (
-            get_service_client()
-            .table("task_activity")
-            .select("*")
-            .contains("audience", [user_id])
-            .order("created_at", desc=True)
+            query.order("created_at", desc=(sort != "oldest"))
             .limit(ACTIVITY_LIMIT)
             .execute()
             .data
         )
 
-    return _memo(f"activity_rows:{user_id}", load)
+    return _memo(f"activity_rows:{user_id}:{scope}:{actor}:{kind}:{project}:{sort}", load)
 
 
 def _is_unread(row: dict, user_id: str, seen_at) -> bool:
@@ -168,21 +196,31 @@ def _is_unread(row: dict, user_id: str, seen_at) -> bool:
 def count_unread_activity(user_id: str) -> int:
     """Just the badge number, for the notification bell.
 
-    Kept separate from build_activity_context so the poll doesn't pay for the
-    per-row enrichment that only the page renders.
+    Counts the same set the page shows by default - everything, minus your own
+    actions - so clicking the bell lands on a view where the highlighted rows
+    and the number you just saw agree. Kept separate from build_activity_context
+    so the poll doesn't pay for the per-row enrichment only the page renders.
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
     return sum(1 for r in _activity_rows(user_id) if _is_unread(r, user_id, seen_at))
 
 
-def build_activity_context(user_id: str) -> dict:
-    """The activity feed: everything that happened to this person's tasks.
+def build_activity_context(
+    user_id: str,
+    scope: str = "",
+    actor: str = "",
+    kind: str = "",
+    project: str = "",
+    sort: str = "newest",
+) -> dict:
+    """The activity feed: everything that has happened, newest first.
 
     Comments, creations, assignments, edits, status moves, completions,
-    archives and deletions - newest first. Their own actions are included, since
-    the page is a record of the work rather than only of what other people did,
-    but they never count as unread.
+    archives and deletions - across tasks, projects and workstreams. The
+    person's own actions are included, since the page is a record of the work
+    rather than only of what other people did, but they never count as unread.
+    Pass scope="mine" to narrow to events involving their own tasks.
 
     Task and project are resolved live where they still exist, purely so an
     entry can link through to the task modal. Everything the line actually says
@@ -190,7 +228,7 @@ def build_activity_context(user_id: str) -> dict:
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
-    rows = _activity_rows(user_id)
+    rows = _activity_rows(user_id, scope=scope, actor=actor, kind=kind, project=project, sort=sort)
 
     profiles = fetch_profiles()
     tasks_by_id = {t["id"]: t for t in fetch_tasks()}
@@ -201,7 +239,11 @@ def build_activity_context(user_id: str) -> dict:
     events = []
     for r in rows:
         task = tasks_by_id.get(r.get("task_id"))
-        project = projects_by_id.get(task["project_id"]) if task else None
+        # The event's own project_id first: it still resolves once the task is
+        # deleted, where the task-derived lookup has nothing left to go from.
+        event_project = projects_by_id.get(r.get("project_id")) or (
+            projects_by_id.get(task["project_id"]) if task else None
+        )
         detail = r.get("detail") or {}
         events.append(
             {
@@ -211,10 +253,13 @@ def build_activity_context(user_id: str) -> dict:
                 # None once the task is gone; the template falls back to plain
                 # text instead of a link that would open an empty modal.
                 "task": task,
-                "project": project,
-                "workstream_id": project["workstream_id"] if project else "all",
-                "title_display": r.get("task_title") or (task or {}).get("title") or "a task",
-                "project_display": r.get("project_name") or (project or {}).get("name"),
+                "project": event_project,
+                "workstream_id": event_project["workstream_id"] if event_project else "all",
+                "entity_type": r.get("entity_type") or "task",
+                "title_display": (
+                    r.get("entity_title") or r.get("task_title") or (task or {}).get("title") or "a task"
+                ),
+                "project_display": (event_project or {}).get("name") or r.get("project_name"),
                 "assignee": profiles.get(detail.get("to")) if r.get("kind") == "assigned" else None,
                 "excerpt": detail.get("excerpt"),
                 "detail": detail,

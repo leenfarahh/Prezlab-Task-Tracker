@@ -47,13 +47,15 @@
        views, since neither sets scoped_project. The archived board reaches this
        block with neither set and correctly gets no button; it's a history view,
        and "Archived tasks" isn't an editable record. #}
-    {% if scoped_project %}
+    {% set me = request.session.user.id %}
+    {# Same creator-only rule as the sidebar's Edit - see app/permissions.py. #}
+    {% if scoped_project and (not scoped_project.created_by or scoped_project.created_by == me) %}
     <button type="button" class="link-muted"
             hx-get="/partials/edit-project-modal?project_id={{ scoped_project.id }}&active_workstream={{ active_workstream }}&active_project={{ active_project }}"
             hx-target="#modal-root" hx-swap="innerHTML" title="Edit project">
       Edit
     </button>
-    {% elif scoped_workstream %}
+    {% elif scoped_workstream and (not scoped_workstream.created_by or scoped_workstream.created_by == me) %}
     <button type="button" class="link-muted"
             hx-get="/partials/edit-workstream-modal?workstream_id={{ scoped_workstream.id }}&active_workstream={{ active_workstream }}"
             hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">

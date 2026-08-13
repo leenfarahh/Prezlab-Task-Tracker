@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app import activity_log
 from app.auth import current_user, require_login
 from app.data import (
     build_activity_context,
@@ -38,7 +39,14 @@ def _mark_comments_seen(user_id: str) -> None:
 
 
 @router.get("/activity", response_class=HTMLResponse)
-def activity_page(request: Request):
+def activity_page(
+    request: Request,
+    scope: str = "",
+    actor: str = "",
+    kind: str = "",
+    project: str = "",
+    sort: str = "newest",
+):
     if current_user(request):
         prefetch(fetch_profiles, fetch_tasks, fetch_projects)
 
@@ -46,6 +54,17 @@ def activity_page(request: Request):
     if redirect:
         return redirect
     user = current_user(request)
+
+    # kind and sort go into the query, so they are checked against the values
+    # this app actually defines rather than passed through. actor and project
+    # are uuids used as equality filters - a bad one matches nothing, which is
+    # the correct outcome and needs no separate guard.
+    if kind not in activity_log.KIND_LABELS:
+        kind = ""
+    if sort not in ("newest", "oldest"):
+        sort = "newest"
+    if scope != "mine":
+        scope = ""
 
     ctx = {
         "request": request,
@@ -56,8 +75,18 @@ def activity_page(request: Request):
         "status_label": STATUS_LABEL,
         # Lets the feed say "reassigned this to you" rather than to your name.
         "current_user_id": user["id"],
+        # Filter dropdowns. Built from the whole team and project list rather
+        # than from the events on screen, so the options don't shift about as
+        # the feed changes - and both are already memoized for this request.
+        "kind_labels": activity_log.KIND_LABELS,
+        "filter_profiles": sorted(fetch_profiles().values(), key=lambda p: p["full_name"]),
+        "filter_projects": sorted(fetch_projects(), key=lambda p: p["name"]),
+        "filters": {"scope": scope, "actor": actor, "kind": kind, "project": project, "sort": sort},
+        "any_filter": bool(scope or actor or kind or project),
         **build_sidebar_context("activity"),
-        **build_activity_context(user["id"]),
+        **build_activity_context(
+            user["id"], scope=scope, actor=actor, kind=kind, project=project, sort=sort
+        ),
     }
     ctx["error"] = None
     response = templates.TemplateResponse("dashboard.html", ctx)

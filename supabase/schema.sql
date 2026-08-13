@@ -88,6 +88,19 @@ create table if not exists public.projects (
   created_at timestamptz not null default now()
 );
 
+-- Who created it. Added because renaming, archiving and especially DELETING a
+-- project or workstream were open to any signed-in user - and delete is
+-- irreversible and cascades to every task and comment underneath. There was no
+-- column to check against, so the guard could not exist at all.
+--
+-- Nullable, and null means "created before this column existed". Those rows
+-- have no creator to protect them, so the app treats them as unowned and lets
+-- anyone act on them; anything created from now on is creator-only. Not
+-- backfilled to a guessed owner, for the same reason the activity feed says
+-- "was created" rather than naming someone: the information was never recorded.
+alter table public.projects add column if not exists created_by uuid references public.profiles (id);
+alter table public.workstreams add column if not exists created_by uuid references public.profiles (id);
+
 -- ---------- Tasks ----------
 
 create table if not exists public.tasks (
@@ -203,6 +216,34 @@ create index if not exists task_activity_task_idx on public.task_activity (task_
 alter table public.task_activity add column if not exists task_title text;
 alter table public.task_activity add column if not exists project_name text;
 
+-- Deliberately a bare uuid with no foreign key. It is a snapshot for the
+-- activity page's project filter, and a reference would either take the row
+-- down with the project or null the very value being filtered on - both of
+-- which lose the history this table exists to keep.
+alter table public.task_activity add column if not exists project_id uuid;
+create index if not exists task_activity_project_idx on public.task_activity (project_id);
+
+-- The feed covers workstreams and projects as well as tasks, so what an event
+-- happened to is now named explicitly. The table keeps its task-shaped columns
+-- (and its name) because rows written before this still use them, and because
+-- task_id is what the feed needs to open a task modal; entity_* is the shared
+-- pair everything reads back through. Bare uuid again, for the same reason as
+-- project_id above - the row must outlive what it describes.
+alter table public.task_activity add column if not exists entity_type text not null default 'task';
+alter table public.task_activity add column if not exists entity_id uuid;
+alter table public.task_activity add column if not exists entity_title text;
+create index if not exists task_activity_entity_idx on public.task_activity (entity_type, entity_id);
+
+-- Carry existing task rows onto the shared columns. Guarded on `is null`, so it
+-- only fills what is missing and is safe to re-run.
+update public.task_activity
+set entity_id = task_id
+where entity_id is null and task_id is not null;
+
+update public.task_activity
+set entity_title = task_title
+where entity_title is null and task_title is not null;
+
 -- Who this event belongs to: the task's creator, its assignee, and whoever
 -- acted, as of the moment it happened. The activity feed filters on this rather
 -- than joining back to tasks, which is what lets it keep showing events for
@@ -257,6 +298,174 @@ create table if not exists public.task_comments (
 -- Composite because every read is "this task's comments, oldest first".
 create index if not exists task_comments_task_idx on public.task_comments (task_id, created_at);
 
+-- ---------- Backfill: history that predates the activity feed ----------
+-- Comments and tasks created before this file was last run have no events, so
+-- the feed would start empty and appear to have lost them. Both inserts below
+-- are idempotent and safe to re-run.
+
+-- Ties an event to the comment it was generated from, so the backfill can tell
+-- what it has already written. Unique, and Postgres allows many nulls in a
+-- unique index, so rows from the other event kinds are unaffected.
+alter table public.task_activity add column if not exists source_comment_id uuid;
+create unique index if not exists task_activity_source_comment_idx
+  on public.task_activity (source_comment_id);
+
+insert into public.task_activity
+  (task_id, actor_id, kind, task_title, project_name, project_id, audience, detail, created_at, source_comment_id)
+select
+  c.task_id,
+  c.author_id,
+  'commented',
+  t.title,
+  p.name,
+  t.project_id,
+  -- Same audience the application computes: creator, assignee, actor. coalesce
+  -- because the column is `not null` and all three can be null on old rows.
+  coalesce((
+    select array_agg(distinct x)
+    from unnest(array[t.created_by, t.assignee_id, c.author_id]) as x
+    where x is not null
+  ), '{}'),
+  jsonb_build_object('excerpt', left(c.body, 180)),
+  c.created_at,  -- the comment's own time, not now(), so the feed reads in order
+  c.id
+from public.task_comments c
+join public.tasks t on t.id = c.task_id
+left join public.projects p on p.id = t.project_id
+on conflict (source_comment_id) do nothing;
+
+-- Task creations are reconstructable from created_by/created_at, which is real
+-- recorded data. No marker column needed: the application writes exactly one
+-- 'created' event per task, so "has one already" is the idempotency check.
+-- Project and workstream creations follow further down, on the same principle;
+-- the note at the end of this section covers what cannot be recovered at all.
+insert into public.task_activity
+  (task_id, actor_id, kind, task_title, project_name, project_id, audience, detail, created_at)
+select
+  t.id,
+  t.created_by,
+  'created',
+  t.title,
+  p.name,
+  t.project_id,
+  coalesce((
+    select array_agg(distinct x)
+    from unnest(array[t.created_by, t.assignee_id]) as x
+    where x is not null
+  ), '{}'),
+  '{}'::jsonb,
+  t.created_at
+from public.tasks t
+left join public.projects p on p.id = t.project_id
+where not exists (
+  select 1 from public.task_activity a
+  where a.kind = 'created' and a.task_id = t.id
+);
+
+-- Fills project_id on rows written before that column existed - both earlier
+-- backfill runs and anything the app logged in between. Guarded on `is null`,
+-- so it only ever touches rows that are actually missing it and is safe to
+-- re-run. Rows whose task has since been deleted keep a null project_id and
+-- simply won't match the project filter; their project is genuinely unknown.
+update public.task_activity a
+set project_id = t.project_id
+from public.tasks t
+where a.project_id is null
+  and a.task_id = t.id;
+
+-- Project and workstream creations. created_at is real, and created_by is used
+-- as the actor wherever it exists - which is anything made since that column was
+-- added. Rows older than it have no recorded creator, so those stay null and the
+-- feed renders them passively ("project X was created") rather than naming
+-- someone. Audience is whoever has a task under it, so these land in the feed of
+-- the people the thing actually concerns.
+--
+-- Idempotency: one 'created' event per entity, same check the task creations
+-- above use.
+insert into public.task_activity
+  (actor_id, kind, entity_type, entity_id, entity_title, project_id, audience, detail, created_at)
+select
+  pr.created_by,
+  'created',
+  'project',
+  pr.id,
+  pr.name,
+  pr.id,
+  coalesce((
+    select array_agg(distinct x)
+    from public.tasks t, unnest(array[t.created_by, t.assignee_id]) as x
+    where t.project_id = pr.id and x is not null
+  ), '{}'),
+  '{}'::jsonb,
+  pr.created_at
+from public.projects pr
+where not exists (
+  select 1 from public.task_activity a
+  where a.kind = 'created' and a.entity_type = 'project' and a.entity_id = pr.id
+);
+
+insert into public.task_activity
+  (actor_id, kind, entity_type, entity_id, entity_title, audience, detail, created_at)
+select
+  w.created_by,
+  'created',
+  'workstream',
+  w.id,
+  w.name,
+  coalesce((
+    select array_agg(distinct x)
+    from public.projects pr
+    join public.tasks t on t.project_id = pr.id,
+    unnest(array[t.created_by, t.assignee_id]) as x
+    where pr.workstream_id = w.id and x is not null
+  ), '{}'),
+  '{}'::jsonb,
+  w.created_at
+from public.workstreams w
+where not exists (
+  select 1 from public.task_activity a
+  where a.kind = 'created' and a.entity_type = 'workstream' and a.entity_id = w.id
+);
+
+-- Attributes creation events that were written before created_by existed, or
+-- before the app started recording it. Guarded on `actor_id is null`, so it
+-- only ever fills a gap and is safe to re-run. Rows whose entity still has no
+-- recorded creator stay null - there is nothing to copy.
+update public.task_activity a
+set actor_id = pr.created_by
+from public.projects pr
+where a.actor_id is null and a.kind = 'created'
+  and a.entity_type = 'project' and a.entity_id = pr.id
+  and pr.created_by is not null;
+
+update public.task_activity a
+set actor_id = w.created_by
+from public.workstreams w
+where a.actor_id is null and a.kind = 'created'
+  and a.entity_type = 'workstream' and a.entity_id = w.id
+  and w.created_by is not null;
+
+update public.task_activity a
+set actor_id = t.created_by
+from public.tasks t
+where a.actor_id is null and a.kind = 'created'
+  and a.entity_type = 'task' and a.entity_id = t.id
+  and t.created_by is not null;
+
+-- Nothing else can be backfilled, and the reason is worth stating plainly
+-- rather than leaving as a gap someone later tries to "fix":
+--
+--   * Archives. is_archived is a boolean with no timestamp and no actor. Tasks
+--     have updated_at, but that is the time of the LAST change of any kind, so
+--     using it would date an archive to whenever the task was last edited.
+--     Projects and workstreams have no updated_at at all.
+--   * Edits, status changes and reassignments. Only the current value is
+--     stored; previous values were never kept anywhere.
+--   * Deletions. The rows are gone. Nothing records that they existed.
+--
+-- Inventing timestamps or actors for these would put wrong history in front of
+-- people who would reasonably trust it.
+
 -- ---------- Session refresh tokens ----------
 -- The signed cookie set on login (app/main.py) is a short-lived, in-memory
 -- session. This table backs a longer-lived refresh token in a second cookie,
@@ -290,8 +499,10 @@ alter table public.workstreams drop column if exists product_id;
 alter table public.projects drop column if exists product_id;
 drop table if exists public.products;
 
--- Workstreams and projects are editable by any allow-listed user, not just a
--- designated owner - only tasks are restricted to their creator/assignee.
+-- owner_id is gone for good; created_by below replaces it. The distinction is
+-- deliberate: owner_id was an assignable role, created_by is a fact about who
+-- made the thing, and only the second one can be recorded without someone
+-- having to maintain it.
 alter table public.workstreams drop column if exists owner_id;
 alter table public.projects drop column if exists owner_id;
 

@@ -2,12 +2,26 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth import require_login
+from app import activity_log
+from app.auth import current_user, require_login
 from app.data import build_archived_workstreams_context, build_sidebar_context
+from app.permissions import creator_denial
 from app.supabase_client import get_service_client
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _workstream_name(workstream_id: str) -> str | None:
+    """This workstream's name, for the activity entry - read before it changes."""
+    row = get_service_client().table("workstreams").select("name").eq("id", workstream_id).execute().data
+    return row[0]["name"] if row else None
+
+
+def _workstream_audience(workstream_id: str, actor_id: str) -> list[str]:
+    """Everyone with a task anywhere under this workstream, plus the actor."""
+    project_ids, _ = _workstream_child_ids(workstream_id)
+    return activity_log.audience_for_projects(project_ids, actor_id)
 
 
 def _refreshed_archive_fragments(request: Request) -> str:
@@ -49,7 +63,14 @@ def create_workstream(
     if redirect:
         return redirect
 
-    get_service_client().table("workstreams").insert({"name": name.strip()}).execute()
+    created = (
+        get_service_client().table("workstreams").insert({"name": name.strip(), "created_by": current_user(request)["id"]}).execute().data
+    )
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.CREATED, activity_log.WORKSTREAM,
+        created[0].get("id") if created else None, name.strip(), user["id"], [user["id"]],
+    )
 
     # oob-only response: closes the modal (empties #modal-root) and refreshes
     # the sidebar in place - same pattern as tasks_router._refreshed_fragments.
@@ -148,7 +169,16 @@ def delete_workstream(
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "workstreams", workstream_id, "workstream")
+    if denial:
+        return denial
+
     service = get_service_client()
+    # Read while there is still something to read.
+    name = _workstream_name(workstream_id)
+    user = current_user(request)
+    audience = _workstream_audience(workstream_id, user["id"])
+
     # Bottom-up, and this order is required rather than tidy:
     # projects.workstream_id is a plain reference with no `on delete cascade`,
     # so deleting the workstream while any project still points at it fails on
@@ -159,6 +189,9 @@ def delete_workstream(
         service.table("tasks").delete().in_("project_id", project_ids).execute()
     service.table("projects").delete().eq("workstream_id", workstream_id).execute()
     service.table("workstreams").delete().eq("id", workstream_id).execute()
+    activity_log.log_event(
+        activity_log.DELETED, activity_log.WORKSTREAM, None, name, user["id"], audience,
+    )
 
     if origin == "archive":
         return HTMLResponse(_refreshed_archive_fragments(request))
@@ -176,7 +209,16 @@ def update_workstream(request: Request, workstream_id: str, name: str = Form(...
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "workstreams", workstream_id, "workstream")
+    if denial:
+        return denial
+
     get_service_client().table("workstreams").update({"name": name.strip()}).eq("id", workstream_id).execute()
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.EDITED, activity_log.WORKSTREAM, workstream_id, name.strip(),
+        user["id"], _workstream_audience(workstream_id, user["id"]), detail={"fields": ["name"]},
+    )
 
     sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
@@ -188,7 +230,16 @@ def archive_workstream(request: Request, workstream_id: str, active_workstream: 
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "workstreams", workstream_id, "workstream")
+    if denial:
+        return denial
+
     service = get_service_client()
+    # Read before the writes: both describe who and what this affected.
+    name = _workstream_name(workstream_id)
+    user = current_user(request)
+    audience = _workstream_audience(workstream_id, user["id"])
+
     service.table("workstreams").update({"is_archived": True}).eq("id", workstream_id).execute()
     # A workstream disappearing from the board shouldn't leave its projects (and
     # their tasks) dangling as live-but-orphaned - archive them as one unit.
@@ -196,6 +247,10 @@ def archive_workstream(request: Request, workstream_id: str, active_workstream: 
     service.table("projects").update({"is_archived": True}).eq("workstream_id", workstream_id).execute()
     if project_ids:
         service.table("tasks").update({"is_archived": True}).in_("project_id", project_ids).execute()
+
+    activity_log.log_event(
+        activity_log.ARCHIVED, activity_log.WORKSTREAM, workstream_id, name, user["id"], audience,
+    )
 
     if active_workstream == workstream_id:
         # Its sidebar entry (and filter) is gone now - bounce to "all" instead
@@ -212,7 +267,16 @@ def unarchive_workstream(request: Request, workstream_id: str):
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "workstreams", workstream_id, "workstream")
+    if denial:
+        return denial
+
     service = get_service_client()
+    # Read before the writes: both describe who and what this affected.
+    name = _workstream_name(workstream_id)
+    user = current_user(request)
+    audience = _workstream_audience(workstream_id, user["id"])
+
     service.table("workstreams").update({"is_archived": False}).eq("id", workstream_id).execute()
     # Mirrors archive_workstream: projects (and their tasks) that went into
     # archive as part of the workstream come back out as part of it too.
@@ -220,5 +284,9 @@ def unarchive_workstream(request: Request, workstream_id: str):
     service.table("projects").update({"is_archived": False}).eq("workstream_id", workstream_id).execute()
     if project_ids:
         service.table("tasks").update({"is_archived": False}).in_("project_id", project_ids).execute()
+
+    activity_log.log_event(
+        activity_log.UNARCHIVED, activity_log.WORKSTREAM, workstream_id, name, user["id"], audience,
+    )
 
     return HTMLResponse(_refreshed_archive_fragments(request))

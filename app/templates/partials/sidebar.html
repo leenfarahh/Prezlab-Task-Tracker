@@ -40,12 +40,19 @@
           <span>{{ w.name }}</span>
           {{ hs.health_strip(w.segments) }}
         </a>
+        {# Hidden for anyone but the creator - every action inside that modal
+           (rename, archive, delete) is creator-only, so offering it would only
+           lead to a refusal. created_by is null on anything made before the
+           column existed, which stays open to everyone. See app/permissions.py,
+           which is where the rule is actually enforced. #}
+        {% if not w.created_by or w.created_by == request.session.user.id %}
         <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 12px; flex-shrink: 0;"
                 onclick="event.stopPropagation()"
                 hx-get="/partials/edit-workstream-modal?workstream_id={{ w.id }}&active_workstream={{ active_workstream }}"
                 hx-target="#modal-root" hx-swap="innerHTML" title="Edit workstream">
           Edit
         </button>
+        {% endif %}
       </summary>
 
       <div class="sidebar-projects">
@@ -56,12 +63,14 @@
             <a href="/?workstream={{ w.id }}&project={{ p.id }}" class="sidebar-item sidebar-item-sub" style="flex: 1;" onclick="event.stopPropagation()">
               {{ p.name }}
             </a>
+            {% if not p.created_by or p.created_by == request.session.user.id %}
             <button type="button" class="link-muted" style="padding: 4px 6px; font-size: 11px; flex-shrink: 0;"
                     onclick="event.stopPropagation()"
                     hx-get="/partials/edit-project-modal?project_id={{ p.id }}&active_workstream={{ w.id }}&active_project={{ p.id }}"
                     hx-target="#modal-root" hx-swap="innerHTML" title="Edit project">
               Edit
             </button>
+            {% endif %}
           </summary>
 
           {% if p.tasks %}

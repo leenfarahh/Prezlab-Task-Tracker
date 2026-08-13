@@ -535,6 +535,33 @@ body.dragging .task-card { pointer-events: none; }
    entry here and a comment in the task modal look like the same object. */
 /* Same prose treatment as .comment-text - see the note there on weight. */
 .activity-intro { font-size: 13px; font-weight: 400; color: var(--muted); margin: 0 0 16px; }
+/* Filter bar. Wraps rather than scrolls - four controls plus a clear link is
+   more than fits a narrow board column, and a hidden filter reads as a missing
+   one. */
+.activity-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 18px; }
+.activity-filter { display: flex; flex-direction: column; gap: 3px; }
+/* Same mono label idiom as .column-header and .ws-overview-label. */
+.activity-filter > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-faint);
+}
+/* These sit outside .modal-card, so they get no styling from it - the field
+   look is restated here, minus the stacking margins that suit a modal form. */
+.activity-filter select {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.activity-filter-clear { align-self: flex-end; padding-bottom: 6px; }
+
 .activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .activity-item {
   display: flex;
@@ -562,9 +589,22 @@ body.dragging .task-card { pointer-events: none; }
   text-align: left;
 }
 .activity-task-link:hover { text-decoration: underline; }
-/* A deleted task's title: same weight so the sentence still reads, struck and
-   muted so it's obvious why it isn't clickable. */
-.activity-task-gone { font-size: 13px; font-weight: 600; color: var(--muted-faint); text-decoration: line-through; }
+/* Stands in for the avatar on entries with no recorded actor. Occupies the same
+   box as .comment-avatar so the column stays aligned, but reads as a bullet
+   rather than an unidentified person. */
+.activity-mark {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: var(--hover-tint);
+}
+
+/* A deleted thing's title. Muted rather than struck through: the line already
+   says "deleted", so the strike repeated it while making the name harder to
+   read - and it looked like the name itself was wrong. */
+.activity-task-gone { font-size: 13px; font-weight: 600; color: var(--muted); }
 /* The meta line wraps on narrow screens - task titles are arbitrary length. */
 .activity-item .comment-meta { flex-wrap: wrap; }
 

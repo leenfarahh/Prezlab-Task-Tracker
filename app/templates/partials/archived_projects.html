@@ -20,6 +20,9 @@
        the only place the thing you most likely want to delete can be reached
        from. origin=archive tells the route to re-render this list rather than
        the sidebar it isn't showing. #}
+    {# Unarchive and Delete are both creator-only now, so the whole pair is
+       hidden from anyone else rather than shown and refused. #}
+    {% if not p.created_by or p.created_by == request.session.user.id %}
     <div style="display: flex; gap: 8px; flex-shrink: 0;">
       <button type="button" class="btn-ghost"
               hx-post="/projects/{{ p.id }}/unarchive"
@@ -32,6 +35,7 @@
         Delete
       </button>
     </div>
+    {% endif %}
   </div>
   {% else %}
   <p class="empty-column">Nothing archived.</p>

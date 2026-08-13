@@ -16,6 +16,9 @@
     </div>
     {# See the note in archived_projects.html: an archived workstream has no
        sidebar entry, so this list is the only route to deleting it. #}
+    {# Unarchive and Delete are both creator-only now, so the whole pair is
+       hidden from anyone else rather than shown and refused. #}
+    {% if not w.created_by or w.created_by == request.session.user.id %}
     <div style="display: flex; gap: 8px; flex-shrink: 0;">
       <button type="button" class="btn-ghost"
               hx-post="/workstreams/{{ w.id }}/unarchive"
@@ -28,6 +31,7 @@
         Delete
       </button>
     </div>
+    {% endif %}
   </div>
   {% else %}
   <p class="empty-column">Nothing archived.</p>

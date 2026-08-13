@@ -127,9 +127,10 @@ def create_task(
     }
     created = get_service_client().table("tasks").insert(row).execute().data
     # The insert echoes the row back, which is where the id comes from - the
-    # event needs it to link through to the task.
+    # event needs it to link through to the task. .get rather than [] so a
+    # thinner-than-expected echo costs the link, not the whole request.
     activity_log.log_task_event(
-        activity_log.CREATED, {**row, "id": created[0]["id"] if created else None}, user["id"]
+        activity_log.CREATED, {**row, "id": created[0].get("id") if created else None}, user["id"]
     )
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, project_id))
@@ -255,18 +256,24 @@ def add_task_comment(request: Request, task_id: str, body: str = Form(...)):
     # rather than a user mistake - drop it and re-render rather than error.
     body = body.strip()
     if body:
-        get_service_client().table("task_comments").insert(
-            {"task_id": task_id, "author_id": user["id"], "body": body[:4000]}
-        ).execute()
+        inserted = (
+            get_service_client()
+            .table("task_comments")
+            .insert({"task_id": task_id, "author_id": user["id"], "body": body[:4000]})
+            .execute()
+            .data
+        )
         # Also logged as an activity event so the feed is one ordered stream
         # rather than two lists merged by date. The thread in the task modal
         # still reads task_comments - this row carries only a snippet, for the
-        # one-line summary the feed shows.
+        # one-line summary the feed shows. source_comment_id links the two so
+        # the schema backfill can't double-count this comment later.
         activity_log.log_task_event(
             activity_log.COMMENTED,
             dict(fetch_task(task_id)),
             user["id"],
             detail={"excerpt": body[:180]},
+            source_comment_id=inserted[0].get("id") if inserted else None,
         )
 
     return _comments_fragment(request, task_id)

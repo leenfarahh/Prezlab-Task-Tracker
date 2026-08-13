@@ -2,12 +2,22 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth import require_login
+from app import activity_log
+from app.auth import current_user, require_login
 from app.data import build_archived_projects_context, build_sidebar_context
+from app.permissions import creator_denial
 from app.supabase_client import get_service_client
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _project_name(project_id: str) -> str | None:
+    """This project's name, for the activity entry - read before it changes."""
+    row = (
+        get_service_client().table("projects").select("name").eq("id", project_id).execute().data
+    )
+    return row[0]["name"] if row else None
 
 
 def _refreshed_archive_fragments(request: Request) -> str:
@@ -46,9 +56,20 @@ def create_project(request: Request, name: str = Form(...), workstream_id: str =
     if redirect:
         return redirect
 
-    get_service_client().table("projects").insert(
-        {"name": name.strip(), "workstream_id": workstream_id}
-    ).execute()
+    created = (
+        get_service_client()
+        .table("projects")
+        .insert({"name": name.strip(), "workstream_id": workstream_id, "created_by": current_user(request)["id"]})
+        .execute()
+        .data
+    )
+    project_id = created[0].get("id") if created else None
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.CREATED, activity_log.PROJECT, project_id, name.strip(),
+        user["id"], activity_log.audience_for_projects([], user["id"]),
+        project_id=project_id,
+    )
 
     # oob-only response: closes the modal (empties #modal-root) and refreshes
     # the sidebar in place - same pattern as tasks_router._refreshed_fragments.
@@ -153,7 +174,15 @@ def delete_project(
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "projects", project_id, "project")
+    if denial:
+        return denial
+
     service = get_service_client()
+    # Both read before the deletes, while there is still something to read.
+    name = _project_name(project_id)
+    audience = activity_log.audience_for_projects([project_id], current_user(request)["id"])
+
     # Tasks are removed first and explicitly. tasks.project_id is declared `on
     # delete cascade` so the database would do it anyway, but being explicit
     # keeps this correct regardless of how the FK ended up on a given install,
@@ -161,6 +190,11 @@ def delete_project(
     # Comments and activity rows hang off the tasks and cascade from them.
     service.table("tasks").delete().eq("project_id", project_id).execute()
     service.table("projects").delete().eq("id", project_id).execute()
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.DELETED, activity_log.PROJECT, None, name,
+        user["id"], audience, project_id=project_id,
+    )
 
     # Deleted from the archived list, which is the page still on screen.
     if origin == "archive":
@@ -187,7 +221,17 @@ def update_project(
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "projects", project_id, "project")
+    if denial:
+        return denial
+
     get_service_client().table("projects").update({"name": name.strip()}).eq("id", project_id).execute()
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.EDITED, activity_log.PROJECT, project_id, name.strip(),
+        user["id"], activity_log.audience_for_projects([project_id], user["id"]),
+        detail={"fields": ["name"]}, project_id=project_id,
+    )
 
     sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream, active_project)}
     return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
@@ -204,10 +248,24 @@ def archive_project(
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "projects", project_id, "project")
+    if denial:
+        return denial
+
+    # Audience and name are read before the writes: both describe who and what
+    # this affected, and the tasks are what make it anyone else's business.
+    name = _project_name(project_id)
+    audience = activity_log.audience_for_projects([project_id], current_user(request)["id"])
+
     get_service_client().table("projects").update({"is_archived": True}).eq("id", project_id).execute()
     # A project disappearing from the board shouldn't leave its tasks
     # dangling as live-but-orphaned - archive them as one unit.
     get_service_client().table("tasks").update({"is_archived": True}).eq("project_id", project_id).execute()
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.ARCHIVED, activity_log.PROJECT, project_id, name,
+        user["id"], audience, project_id=project_id,
+    )
 
     if active_project == project_id:
         # Its board tab (and filter) is gone now - bounce to the workstream's
@@ -224,9 +282,21 @@ def unarchive_project(request: Request, project_id: str):
     if redirect:
         return redirect
 
+    denial = creator_denial(request, "projects", project_id, "project")
+    if denial:
+        return denial
+
+    name = _project_name(project_id)
+    audience = activity_log.audience_for_projects([project_id], current_user(request)["id"])
+
     get_service_client().table("projects").update({"is_archived": False}).eq("id", project_id).execute()
     # Mirrors archive_project: tasks that went into archive as part of the
     # project come back out as part of it too.
     get_service_client().table("tasks").update({"is_archived": False}).eq("project_id", project_id).execute()
+    user = current_user(request)
+    activity_log.log_event(
+        activity_log.UNARCHIVED, activity_log.PROJECT, project_id, name,
+        user["id"], audience, project_id=project_id,
+    )
 
     return HTMLResponse(_refreshed_archive_fragments(request))
