@@ -6,6 +6,7 @@ from app.auth import current_user, require_login
 from app.data import fetch_profiles, fetch_task, prefetch
 from app.fragments import refreshed_fragments
 from app.supabase_client import get_service_client
+from app.view_helpers import STATUS_ORDER
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -154,6 +155,42 @@ def update_task(
             "due_date": due_date or None,
         }
     ).eq("id", task_id).execute()
+
+    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
+
+
+@router.post("/tasks/{task_id}/status", response_class=HTMLResponse)
+def set_task_status(
+    request: Request,
+    task_id: str,
+    status: str = Form(...),
+    active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
+):
+    """Status-only update, posted by a drag between board columns.
+
+    Deliberately separate from update_task rather than a lighter call into it:
+    that one takes the whole task off the edit form and would need every other
+    field echoed back just to move a card, which is both a bigger payload and a
+    way to clobber a field a teammate changed between the page render and the
+    drop. Same permission guard, same oob refresh.
+    """
+    denial = _guard(request, task_id)
+    if denial:
+        return denial
+
+    # Nothing else validates status - the edit form is a <select> built from
+    # STATUS_ORDER - but this one arrives as a bare form field from client-side
+    # JS, so a stale or hand-rolled value would otherwise reach the column
+    # check constraint as a 500.
+    if status not in STATUS_ORDER:
+        return HTMLResponse(
+            templates.get_template("partials/permission_denied_modal.html").render(
+                {"request": request, "message": f"Unknown status: {status}."}
+            )
+        )
+
+    get_service_client().table("tasks").update({"status": status}).eq("id", task_id).execute()
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 

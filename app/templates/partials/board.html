@@ -10,6 +10,9 @@
    refresh after a create/edit/archive morphs instead of replacing outright. #}
 <section class="board-section" id="board-container"
          {% if oob %}hx-swap-oob="morph"{% endif %}
+         {# The scope a drop has to post back, so the oob refresh it triggers
+            re-renders the board the user is actually looking at. #}
+         data-workstream="{{ active_workstream }}" data-project="{{ active_project }}"
          hx-get="/partials/board?workstream={{ active_workstream }}&project={{ active_project }}" hx-trigger="every 5s" hx-swap="morph">
   {% if active_workstream != "archived" %}
   <div class="board-topbar">
@@ -124,15 +127,19 @@
     {% endfor %}
   </div>
   {% else %}
+  {# data-status is what dnd.js reads to turn a column into a drop target, so it
+     doubles as the on/off switch: the archived board renders the same status
+     grid but is a history view, not somewhere to reshuffle work. #}
+  {% set droppable = active_workstream != "archived" %}
   <div class="board-grid">
     {% for status in status_order %}
-    <div class="board-column">
+    <div class="board-column" {% if droppable %}data-status="{{ status }}"{% endif %}>
       <p class="column-header">
         <span>{{ status_label[status] }}</span>
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids, droppable) }}
       {% else %}
         <p class="empty-column">Nothing here.</p>
       {% endfor %}

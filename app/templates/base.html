@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="/static/styles.css" />
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
+  {# After htmx, and deferred like it: dnd.js calls htmx.ajax on drop, and
+     deferred scripts run in document order. #}
+  <script src="/static/dnd.js" defer></script>
   <script>
     if (localStorage.getItem('sidebarCollapsed') === '1') {
       document.documentElement.classList.add('sidebar-collapsed');

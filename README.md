@@ -85,6 +85,14 @@ How it works: `app/gemini_client.py` sends the note to Gemini along with the cur
 
 Nothing is written to the database directly from the model. Every run lands on a review screen where each draft can be edited, unchecked, or reassigned, and project is required before the batch can be created. That review step is deliberate and shouldn't be optimised away: it's the thing that keeps a wrong guess from silently becoming a real task on someone's board.
 
+## Moving a task between statuses
+
+Two ways, both kept: open the card and change the Status field, or drag the card into another column. The drag posts to `POST /tasks/{id}/status` (status only, not the whole task) and comes back as the same board+sidebar out-of-band refresh every other write uses. Same permission rule as the modal — creator or assignee only — so a refused drag returns the permission modal and the card snaps back.
+
+Every status column is ordered by due date, soonest first, with undated tasks at the bottom (`due_date_sort_key` in `app/view_helpers.py`, applied by `group_by_status` — so the board, the team page, and profile pages all read the same way). A dropped card is placed into that order client-side too, rather than at the end of the column, so it doesn't visibly jump when the refresh lands.
+
+Dragging is enabled only on the status-grouped board. The "by user" columns are people rather than statuses, and the archived board is a history view, so cards in both stay click-to-edit. Client side lives in `app/static/dnd.js`.
+
 ## Auth model
 
 There is no identity verification: entering an allow-listed address and submitting logs you in as that address, no code, no password, no proof you own it. Access is gated by `ALLOWED_LOGIN_EMAILS` — an explicit comma-separated list in the environment, which replaced the earlier "any `@prezlab.com` address" domain check. That's only acceptable because this app is reachable solely on the enterprise network, not the public internet - never widen the allow-list to a whole domain or expose this app publicly without adding real verification back.
@@ -111,6 +119,8 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 ### Data and behaviour
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.
+- **Drag and drop is pointer-only.** It's built on the HTML5 drag events, so there's no keyboard equivalent and it does nothing useful on touch. That's why the Status field stays in the edit modal — it, not the drag, is the accessible path, and removing it would make the board unusable without a mouse.
+- **A dropped card moves before the server confirms it.** The card is repositioned immediately and corrected from the response, so for the length of one round trip the board shows the move as done. A refusal or a network error pulls a fresh board straight away, but a drop that fails will visibly undo itself rather than never appearing to happen.
 - **Unarchiving a workstream is not an exact undo.** Archiving a workstream archives its projects and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the workstream was archived comes back out too. Rare, but surprising when it happens.
 - **`docs/llm-feature-proposal.md` describes a feature this version doesn't have.** It argues for the JS version's Workstream Pulse digest; the LLM feature actually built here is "New task from text". Read it as background on the decision, not as a description of the app.
 - **No comments/notifications** — same scope cut as the JS version, contained follow-ups rather than schema changes.

@@ -57,9 +57,13 @@ def user_page(request: Request, user_id: str):
     redirect = require_login(request)
     if redirect:
         return redirect
+    # Your own profile has its own sidebar entry, so light that one. Someone
+    # else's profile is only reachable from the team list, so Team stays lit
+    # there rather than leaving nothing highlighted.
+    scope = "profile" if current_user(request)["id"] == user_id else "team"
     ctx = {
         "board_template": "partials/user_detail.html",
-        **build_sidebar_context("team"),
+        **build_sidebar_context(scope),
         **_user_ctx(request, user_id),
     }
     ctx["error"] = None

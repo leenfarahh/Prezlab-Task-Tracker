@@ -90,10 +90,29 @@ def date_buckets(tasks: list[dict]) -> dict:
     return buckets
 
 
+def due_date_sort_key(task: dict) -> tuple[int, str]:
+    """Soonest due date first, undated tasks last.
+
+    The leading 0/1 is what parks the undated ones at the bottom - sorting them
+    on the date alone would have to treat "no date" as either the far future or
+    the distant past, and an undated task is neither the least nor the most
+    urgent thing in a column. Dates are ISO strings, so they compare
+    chronologically as text with no parsing.
+    """
+    due = task.get("due_date")
+    return (0, due) if due else (1, "")
+
+
 def group_by_status(tasks: list[dict]) -> dict[str, list[dict]]:
     grouped = {status: [] for status in STATUS_ORDER}
     for t in tasks:
         grouped.setdefault(t["status"], []).append(t)
+    # Each column reads top-down as what's due next. Sorting here rather than in
+    # the query keeps it independent of how tasks were fetched, and because
+    # Python's sort is stable, same-date tasks (and the whole undated group)
+    # stay in the created_at order fetch_tasks returns.
+    for column in grouped.values():
+        column.sort(key=due_date_sort_key)
     return grouped
 
 

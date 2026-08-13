@@ -1,5 +1,9 @@
-{% macro task_card(task, assignee, priority_label, priority_color, active_workstream, active_project, flagged=False) -%}
+{# draggable is only set on the status-grouped board, where a column IS a status
+   and a drop has an unambiguous meaning. The by-user columns are assignees and
+   the archived board is read-only, so cards there stay click-to-edit only. #}
+{% macro task_card(task, assignee, priority_label, priority_color, active_workstream, active_project, flagged=False, draggable=False) -%}
 <button class="task-card status-{{ task.status }} {{ 'flagged' if flagged else '' }}"
+        {% if draggable %}draggable="true" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-due="{{ task.due_date or '' }}"{% endif %}
         hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}&project={{ active_project }}" hx-target="#modal-root" hx-swap="innerHTML">
   {% if active_project in ("all", "archived", "by_user") and task.project_name %}
   <p class="project-tag">{{ task.project_name }}</p>

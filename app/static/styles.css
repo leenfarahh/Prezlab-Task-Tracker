@@ -311,6 +311,17 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 .task-card:hover { border-color: rgba(0,37,40,0.35); box-shadow: 0 4px 12px rgba(0,37,40,0.08); transform: translateY(-1px); }
 .task-card.flagged { border-color: rgba(185,121,31,0.6); }
 
+/* Drag a card into another status column as a shortcut for opening it and
+   changing the Status field. Only the status-grouped board sets draggable, so
+   the grab cursor is also the affordance telling you where it works. */
+.task-card[draggable="true"] { cursor: grab; }
+.task-card.is-dragging { opacity: 0.4; cursor: grabbing; }
+.task-card.is-dragging:hover { transform: none; box-shadow: 0 1px 2px rgba(0,37,40,0.04); }
+.board-column.drop-over { background: var(--hover-tint); box-shadow: inset 0 0 0 2px rgba(0,37,40,0.35); }
+/* Cards lift on hover, and dragging one over a stack of them sets the whole
+   column twitching. Nothing under the cursor is clickable mid-drag anyway. */
+body.dragging .task-card { pointer-events: none; }
+
 /* htmx sets .htmx-request on an element for the life of its request. Even a
    fast round trip is ~100ms of network before anything can change on screen,
    and with no feedback in that window a click reads as "nothing happened",
