@@ -482,6 +482,32 @@ body.dragging .task-card { pointer-events: none; }
 .modal-menu-item:hover { background: var(--hover-tint); }
 .modal-menu-item.danger { color: var(--blocked); }
 
+/* One extracted task on the "new task from text" review screen. Unwanted drafts
+   are deleted outright rather than deselected, so there's no opt-in checkbox -
+   whatever is still on screen when Create is pressed is what gets written. */
+.draft-card { border: 1px solid var(--line); border-radius: 3px; padding: 12px; margin-bottom: 12px; }
+/* The remove button shares the title's row instead of being absolutely placed
+   in the card's top-right corner: at that size the corner overlaps the title
+   input, which starts only a few px below it. Sharing the row keeps the two
+   clear of each other without spending a whole strip of vertical space on a
+   single button. */
+.draft-card-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+/* Beats .modal-card input on specificity - that rule's own margins are what the
+   flex row replaces here, and full width would crowd out the button. */
+.modal-card .draft-card-head input { flex: 1; margin: 0; }
+.draft-remove {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+.draft-remove:hover { background: var(--hover-tint); color: var(--blocked); }
+
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .login-card { width: 100%; max-width: 360px; }
 .login-card input { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; font-size: 14px; color: var(--ink); margin-bottom: 10px; }

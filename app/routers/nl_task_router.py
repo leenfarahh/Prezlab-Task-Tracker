@@ -108,25 +108,33 @@ async def create_tasks_batch(request: Request):
     active_project = form.get("active_project", "all")
     valid_project_ids = {p["id"] for p in fetch_projects()}
 
+    # The review screen deletes unwanted drafts instead of unticking them, so the
+    # posted indices are whatever survived and are not contiguous - removing the
+    # second of three cards submits 0 and 2. Walking a counter from 0 would stop
+    # at the first gap and silently drop every draft after it, so take the
+    # indices actually present. Sorted numerically (not as strings, which would
+    # order 10 before 2) to keep the rows in the order they were reviewed in.
+    prefix = "title_"
+    indices = sorted(
+        {int(key[len(prefix):]) for key in form.keys() if key.startswith(prefix) and key[len(prefix):].isdigit()}
+    )
+
     rows = []
-    index = 0
-    while f"title_{index}" in form:
-        if form.get(f"include_{index}") == "on":
-            title = form.get(f"title_{index}", "").strip()
-            project_id = form.get(f"project_id_{index}", "")
-            if title and project_id in valid_project_ids:
-                rows.append(
-                    {
-                        "project_id": project_id,
-                        "title": title,
-                        "description": form.get(f"description_{index}", "").strip() or None,
-                        "priority": form.get(f"priority_{index}", "medium"),
-                        "assignee_id": form.get(f"assignee_id_{index}") or None,
-                        "due_date": form.get(f"due_date_{index}") or None,
-                        "created_by": user["id"],
-                    }
-                )
-        index += 1
+    for index in indices:
+        title = form.get(f"title_{index}", "").strip()
+        project_id = form.get(f"project_id_{index}", "")
+        if title and project_id in valid_project_ids:
+            rows.append(
+                {
+                    "project_id": project_id,
+                    "title": title,
+                    "description": form.get(f"description_{index}", "").strip() or None,
+                    "priority": form.get(f"priority_{index}", "medium"),
+                    "assignee_id": form.get(f"assignee_id_{index}") or None,
+                    "due_date": form.get(f"due_date_{index}") or None,
+                    "created_by": user["id"],
+                }
+            )
 
     if rows:
         get_service_client().table("tasks").insert(rows).execute()

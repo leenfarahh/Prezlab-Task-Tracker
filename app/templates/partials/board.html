@@ -65,10 +65,14 @@
 
   {% if workstream_overview %}
   <div class="ws-overview">
+    {# None on a project board - see data.py. The row is flex with a gap, so
+       dropping this tile just reflows the rest; no placeholder needed. #}
+    {% if workstream_overview.project_count is not none %}
     <div class="ws-overview-item">
       <span class="ws-overview-label">Projects</span>
       <span class="ws-overview-value">{{ workstream_overview.project_count }}</span>
     </div>
+    {% endif %}
     <div class="ws-overview-item">
       <span class="ws-overview-label">Tasks</span>
       <span class="ws-overview-value">{{ workstream_overview.done_count }} / {{ workstream_overview.total_tasks }} done</span>

@@ -157,7 +157,13 @@ def build_board_context(active_workstream: str, active_project: str) -> dict:
     workstream_overview = None
     if scoped_workstream:
         workstream_overview = {
-            "project_count": len(tab_projects),
+            # Only meaningful while the board spans the whole workstream. Drilled
+            # into one project this counts the workstream's projects, not
+            # anything on screen - so it reads as either noise or a wrong number
+            # under a heading that already names the single project. None tells
+            # the template to drop the tile. The task figures below stay in both
+            # scopes because "tasks" is already filtered to whatever is showing.
+            "project_count": None if scoped_project else len(tab_projects),
             "total_tasks": len(tasks),
             "done_count": sum(1 for t in tasks if t["status"] == "done"),
             "segments": health_strip_segments(tasks),
