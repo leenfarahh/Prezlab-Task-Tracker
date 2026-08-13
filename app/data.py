@@ -114,10 +114,11 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
     return _memo(f"tasks:{archived}", load)
 
 
-# ---------- Comment activity ----------
-# "Your tasks" throughout this section means the same creator-or-assignee rule
-# the task write guard uses (_task_owner_denial in app/routers/tasks_router.py),
-# so the feed covers exactly the tasks you are answerable for.
+# ---------- Task activity ----------
+# Events are written by app/activity_log.py, each carrying the audience it
+# belongs to: the task's creator, its assignee and whoever acted, as of the
+# moment it happened. Reading is therefore a filter on that array, not a join -
+# see _activity_rows for why that matters.
 #
 # Everything here is scoped to one user id, which the routes take from the
 # session and never from a URL - there is no way to ask for someone else's.
@@ -125,39 +126,38 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
 ACTIVITY_LIMIT = 100
 
 
-def _my_tasks(user_id: str) -> dict[str, dict]:
-    """The live tasks this person created or is assigned, keyed by id.
+def _activity_rows(user_id: str) -> list[dict]:
+    """This person's newest activity rows, raw, capped at ACTIVITY_LIMIT.
 
-    Archived tasks are deliberately out of scope: their comments are history,
-    and pulling them in would cost a second tasks read on every bell poll for
-    notifications nobody is going to act on.
+    Filtered on the audience array each event was written with rather than by
+    joining back to tasks. That is what lets the feed keep showing events whose
+    task has since been deleted, and it freezes whose history an event belongs
+    to at the moment it happened - reassigning a task later doesn't retroactively
+    move its past out of the previous owner's feed.
     """
-    return {t["id"]: t for t in fetch_tasks() if user_id in (t.get("created_by"), t.get("assignee_id"))}
-
-
-def _activity_rows(user_id: str, task_ids: list[str]) -> list[dict]:
-    """Newest comments on the given tasks, raw rows, capped at ACTIVITY_LIMIT."""
-    if not task_ids:
-        return []
 
     def load():
         return (
             get_service_client()
-            .table("task_comments")
+            .table("task_activity")
             .select("*")
-            .in_("task_id", task_ids)
+            .contains("audience", [user_id])
             .order("created_at", desc=True)
             .limit(ACTIVITY_LIMIT)
             .execute()
             .data
         )
 
-    return _memo(f"comment_activity:{user_id}", load)
+    return _memo(f"activity_rows:{user_id}", load)
 
 
 def _is_unread(row: dict, user_id: str, seen_at) -> bool:
-    """Someone else's comment, newer than this person's read watermark."""
-    if row.get("author_id") == user_id:
+    """Someone else's event, newer than this person's read watermark.
+
+    Your own actions never count: archiving your own task shouldn't light up
+    your own bell.
+    """
+    if row.get("actor_id") == user_id:
         return False
     created = parse_timestamp(row.get("created_at"))
     if created is None:
@@ -165,48 +165,60 @@ def _is_unread(row: dict, user_id: str, seen_at) -> bool:
     return seen_at is None or created > seen_at
 
 
-def count_unread_comments(user_id: str) -> int:
+def count_unread_activity(user_id: str) -> int:
     """Just the badge number, for the notification bell.
 
     Kept separate from build_activity_context so the poll doesn't pay for the
-    project lookup and per-row enrichment that only the page renders.
+    per-row enrichment that only the page renders.
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
-    rows = _activity_rows(user_id, list(_my_tasks(user_id)))
-    return sum(1 for r in rows if _is_unread(r, user_id, seen_at))
+    return sum(1 for r in _activity_rows(user_id) if _is_unread(r, user_id, seen_at))
 
 
 def build_activity_context(user_id: str) -> dict:
-    """The activity feed: comments on this person's tasks, newest first.
+    """The activity feed: everything that happened to this person's tasks.
 
-    Their own comments are included - the page is a record of the conversation
-    on their work, not only of what other people said - but they never count as
-    unread, so commenting on your own task can't light up your own bell.
+    Comments, creations, assignments, edits, status moves, completions,
+    archives and deletions - newest first. Their own actions are included, since
+    the page is a record of the work rather than only of what other people did,
+    but they never count as unread.
+
+    Task and project are resolved live where they still exist, purely so an
+    entry can link through to the task modal. Everything the line actually says
+    comes from the snapshot on the event, so a deleted task still reads.
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
-    my_tasks = _my_tasks(user_id)
-    rows = _activity_rows(user_id, list(my_tasks))
+    rows = _activity_rows(user_id)
 
     profiles = fetch_profiles()
+    tasks_by_id = {t["id"]: t for t in fetch_tasks()}
+    tasks_by_id.update({t["id"]: t for t in fetch_tasks(archived=True)})
     projects_by_id = {p["id"]: p for p in fetch_projects()}
+    projects_by_id.update({p["id"]: p for p in fetch_projects(archived=True)})
 
     events = []
     for r in rows:
-        task = my_tasks.get(r["task_id"])
-        if task is None:
-            continue  # task archived or reassigned between the two reads
-        project = projects_by_id.get(task["project_id"])
+        task = tasks_by_id.get(r.get("task_id"))
+        project = projects_by_id.get(task["project_id"]) if task else None
+        detail = r.get("detail") or {}
         events.append(
             {
                 **r,
-                "author": profiles.get(r["author_id"]),
-                "created_display": format_timestamp(r["created_at"]),
+                "actor": profiles.get(r.get("actor_id")),
+                "created_display": format_timestamp(r.get("created_at")),
+                # None once the task is gone; the template falls back to plain
+                # text instead of a link that would open an empty modal.
                 "task": task,
                 "project": project,
                 "workstream_id": project["workstream_id"] if project else "all",
-                "is_own": r.get("author_id") == user_id,
+                "title_display": r.get("task_title") or (task or {}).get("title") or "a task",
+                "project_display": r.get("project_name") or (project or {}).get("name"),
+                "assignee": profiles.get(detail.get("to")) if r.get("kind") == "assigned" else None,
+                "excerpt": detail.get("excerpt"),
+                "detail": detail,
+                "is_own": r.get("actor_id") == user_id,
                 "is_unread": _is_unread(r, user_id, seen_at),
             }
         )

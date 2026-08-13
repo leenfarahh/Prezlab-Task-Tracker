@@ -103,11 +103,17 @@ Posting or deleting re-renders only the thread (`#task-comments`), not the board
 
 ## Notifications and the activity page
 
-A bell in the top bar shows how many comments on **your** tasks you haven't seen. "Your tasks" is the same creator-or-assignee rule used everywhere else. Your own comments never count — commenting on your own task can't light up your own bell.
+A bell in the top bar shows how many updates to **your** tasks you haven't seen. Your own actions never count — archiving your own task can't light up your own bell.
+
+`/activity` shows the full stream: creations, assignments, edits, status moves, completions, archives, deletions and comments. Events are written by the application (`app/activity_log.py`), not by a database trigger. The trigger that used to do it has been dropped, because it could not know two things: **who acted** (every query uses one service-role key with no per-request database user, so it logged the task's *assignee* as the actor — reassigning someone else's task credited them with having done it), and **what the action meant** (at the row level an archive, an edit and a status change are all the same UPDATE).
+
+Each event carries a snapshot — task title, project name, and the `audience` it belongs to (creator, assignee, actor, as of that moment). The feed filters on that array rather than joining back to tasks, which is what lets a **deleted** task still appear, and freezes whose history an event belongs to: reassigning a task later doesn't move its past out of the previous owner's feed. `task_activity.task_id` is now nullable with `on delete set null`; a deletion event is written with a null `task_id` outright, since inserting a reference to an already-deleted row would fail the foreign key.
+
+Two things to know: events only exist from the moment this shipped, so comments and tasks predating it have no feed entries; and deleting a *project or workstream* removes its tasks without logging a per-task deletion for each one.
 
 The bell loads and refreshes itself (`hx-trigger="load, every 20s"` on the wrapper in `dashboard.html`) rather than being handed a count. That top strip is shared by every page — board, team, profile, archived, activity — each rendered by a different route, so threading a count through context would mean touching all of them and remembering to on the next one.
 
-`/activity` lists those comments newest-first, entries you hadn't seen yet tinted. **It is private.** The route takes no user id at all and builds the feed for whoever is in the session, so there is no `/users/{id}/activity` and no id to swap for a teammate's — the privacy comes from the route's shape rather than from a check a later edit could drop. Nobody can see anyone else's activity.
+`/activity` lists those events newest-first, entries you hadn't seen yet tinted. **It is private.** The route takes no user id at all and builds the feed for whoever is in the session, so there is no `/users/{id}/activity` and no id to swap for a teammate's — the privacy comes from the route's shape rather than from a check a later edit could drop. Nobody can see anyone else's activity.
 
 Unread is tracked by one watermark per person, `profiles.comments_seen_at`; opening `/activity` pushes it to `now()`. The bump happens *after* the response is rendered, so the page you're looking at still highlights what was new — that highlight survives exactly one visit. Two consequences worth knowing: the watermark is a single timestamp, not per-comment read state, so opening the page marks *everything* read at once; and archived tasks are excluded, since their comments are history and including them would cost a second query on every bell poll.
 

@@ -101,6 +101,80 @@ def confirm_archive_project_modal(
     return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
 
 
+@router.get("/partials/confirm-delete-project-modal", response_class=HTMLResponse)
+def confirm_delete_project_modal(
+    request: Request,
+    project_id: str,
+    active_workstream: str = "all",
+    active_project: str = "all",
+    origin: str = "board",
+):
+    """Confirmation for a permanent delete.
+
+    The count is looked up rather than described vaguely: this is one of the two
+    actions in the app with no way back, and "and its 14 tasks" is the thing
+    that stops someone confirming it out of habit. Tasks are counted in both
+    archive states, because the delete takes both.
+    """
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    tasks = get_service_client().table("tasks").select("id").eq("project_id", project_id).execute().data
+    count = len(tasks)
+    ctx = {
+        "request": request,
+        "title": "Delete project",
+        "message": (
+            f"Permanently delete this project and its {count} task{'' if count == 1 else 's'}, "
+            "including every comment on them? This can't be undone - archive it "
+            "instead if there's any chance you'll want it back."
+        ),
+        "confirm_url": f"/projects/{project_id}/delete",
+        "confirm_vals": {
+            "active_workstream": active_workstream,
+            "active_project": active_project,
+            "origin": origin,
+        },
+        "confirm_label": "Delete",
+    }
+    return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
+
+
+@router.post("/projects/{project_id}/delete", response_class=HTMLResponse)
+def delete_project(
+    request: Request,
+    project_id: str,
+    active_workstream: str = Form("all"),
+    active_project: str = Form("all"),
+    origin: str = Form("board"),
+):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    service = get_service_client()
+    # Tasks are removed first and explicitly. tasks.project_id is declared `on
+    # delete cascade` so the database would do it anyway, but being explicit
+    # keeps this correct regardless of how the FK ended up on a given install,
+    # and mirrors how archive_project handles the same parent/child pair.
+    # Comments and activity rows hang off the tasks and cascade from them.
+    service.table("tasks").delete().eq("project_id", project_id).execute()
+    service.table("projects").delete().eq("id", project_id).execute()
+
+    # Deleted from the archived list, which is the page still on screen.
+    if origin == "archive":
+        return HTMLResponse(_refreshed_archive_fragments(request))
+
+    if active_project == project_id:
+        # Same reasoning as archive_project: the board is pointed at a project
+        # that no longer exists, so send it somewhere that does.
+        return HTMLResponse("", headers={"HX-Redirect": f"/?workstream={active_workstream}&project=all"})
+
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream, active_project)}
+    return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
+
+
 @router.post("/projects/{project_id}", response_class=HTMLResponse)
 def update_project(
     request: Request,

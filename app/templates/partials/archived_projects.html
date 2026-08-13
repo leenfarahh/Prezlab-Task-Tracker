@@ -15,11 +15,23 @@
       <p class="task-card-title">{{ p.name }}</p>
       <p class="task-card-meta">{{ p.archived_task_count }} archived task{{ '' if p.archived_task_count == 1 else 's' }}</p>
     </div>
-    <button type="button" class="btn-ghost"
-            hx-post="/projects/{{ p.id }}/unarchive"
-            hx-target="#modal-root" hx-swap="innerHTML">
-      Unarchive
-    </button>
+    {# Delete lives here as well as in the edit modal because an archived project
+       is gone from the sidebar, so its Edit button is unreachable - this list is
+       the only place the thing you most likely want to delete can be reached
+       from. origin=archive tells the route to re-render this list rather than
+       the sidebar it isn't showing. #}
+    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+      <button type="button" class="btn-ghost"
+              hx-post="/projects/{{ p.id }}/unarchive"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        Unarchive
+      </button>
+      <button type="button" class="btn-ghost" style="color: var(--blocked);"
+              hx-get="/partials/confirm-delete-project-modal?project_id={{ p.id }}&origin=archive"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        Delete
+      </button>
+    </div>
   </div>
   {% else %}
   <p class="empty-column">Nothing archived.</p>

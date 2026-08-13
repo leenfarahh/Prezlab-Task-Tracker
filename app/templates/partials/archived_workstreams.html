@@ -14,11 +14,20 @@
       <p class="task-card-title">{{ w.name }}</p>
       <p class="task-card-meta">{{ w.archived_project_count }} archived project{{ '' if w.archived_project_count == 1 else 's' }}</p>
     </div>
-    <button type="button" class="btn-ghost"
-            hx-post="/workstreams/{{ w.id }}/unarchive"
-            hx-target="#modal-root" hx-swap="innerHTML">
-      Unarchive
-    </button>
+    {# See the note in archived_projects.html: an archived workstream has no
+       sidebar entry, so this list is the only route to deleting it. #}
+    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+      <button type="button" class="btn-ghost"
+              hx-post="/workstreams/{{ w.id }}/unarchive"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        Unarchive
+      </button>
+      <button type="button" class="btn-ghost" style="color: var(--blocked);"
+              hx-get="/partials/confirm-delete-workstream-modal?workstream_id={{ w.id }}&origin=archive"
+              hx-target="#modal-root" hx-swap="innerHTML">
+        Delete
+      </button>
+    </div>
   </div>
   {% else %}
   <p class="empty-column">Nothing archived.</p>

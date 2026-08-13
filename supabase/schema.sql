@@ -197,35 +197,40 @@ create table if not exists public.task_activity (
 
 create index if not exists task_activity_task_idx on public.task_activity (task_id);
 
--- Auto-log status changes so the feed stays reliable without relying on the client to log it.
-create or replace function public.log_task_change()
-returns trigger as $$
-begin
-  if (tg_op = 'INSERT') then
-    insert into public.task_activity (task_id, actor_id, kind, detail)
-    values (new.id, new.created_by, 'created', jsonb_build_object('status', new.status));
-  elsif (tg_op = 'UPDATE') then
-    if new.status is distinct from old.status then
-      insert into public.task_activity (task_id, actor_id, kind, detail)
-      values (new.id, new.assignee_id, 'status_changed', jsonb_build_object('from', old.status, 'to', new.status));
-    end if;
-    if new.assignee_id is distinct from old.assignee_id then
-      insert into public.task_activity (task_id, actor_id, kind, detail)
-      values (new.id, new.assignee_id, 'reassigned', jsonb_build_object('from', old.assignee_id, 'to', new.assignee_id));
-    end if;
-    if new.due_date is distinct from old.due_date then
-      insert into public.task_activity (task_id, actor_id, kind, detail)
-      values (new.id, new.assignee_id, 'due_date_changed', jsonb_build_object('from', old.due_date, 'to', new.due_date));
-    end if;
-  end if;
-  return new;
-end;
-$$ language plpgsql;
+-- Snapshots taken at log time. A "deleted" event has to outlive the task it
+-- describes, and once the task row is gone there is nothing left to join to for
+-- a title - so the readable parts are copied onto the event itself.
+alter table public.task_activity add column if not exists task_title text;
+alter table public.task_activity add column if not exists project_name text;
 
+-- Who this event belongs to: the task's creator, its assignee, and whoever
+-- acted, as of the moment it happened. The activity feed filters on this rather
+-- than joining back to tasks, which is what lets it keep showing events for
+-- tasks that no longer exist, and stops a later reassignment rewriting whose
+-- history an old event appears in.
+alter table public.task_activity add column if not exists audience uuid[] not null default '{}';
+create index if not exists task_activity_audience_idx on public.task_activity using gin (audience);
+create index if not exists task_activity_created_idx on public.task_activity (created_at desc);
+
+-- task_id was `not null ... on delete cascade`, which meant deleting a task also
+-- deleted the record that it had been deleted. Now it goes null and the event
+-- survives, carrying the snapshot above.
+alter table public.task_activity drop constraint if exists task_activity_task_id_fkey;
+alter table public.task_activity alter column task_id drop not null;
+alter table public.task_activity
+  add constraint task_activity_task_id_fkey
+  foreign key (task_id) references public.tasks (id) on delete set null;
+
+-- The trigger that used to write this table is gone, deliberately. It could not
+-- know who acted: this app talks to Postgres with a single service-role key and
+-- no per-request database user, so the trigger logged new.assignee_id as the
+-- actor - the person the task belongs to, not the person who touched it.
+-- Reassigning someone else's task recorded *them* as having done it. The
+-- application knows the real actor from the session and logs it there instead
+-- (app/activity_log.py), which is also the only place that can distinguish an
+-- edit from an archive from a delete.
 drop trigger if exists tasks_log_change on public.tasks;
-create trigger tasks_log_change
-  after insert or update on public.tasks
-  for each row execute procedure public.log_task_change();
+drop function if exists public.log_task_change();
 
 -- ---------- Comments ----------
 -- Discussion on a task, open to the whole team. Deliberately NOT restricted to

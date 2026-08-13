@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app import activity_log
 from app.auth import current_user, require_login
 from app.data import fetch_profiles, fetch_task, fetch_task_comments, prefetch
 from app.fragments import refreshed_fragments
@@ -116,16 +117,20 @@ def create_task(
         return redirect
     user = current_user(request)
 
-    get_service_client().table("tasks").insert(
-        {
-            "project_id": project_id,
-            "title": title.strip(),
-            "priority": priority,
-            "assignee_id": assignee_id or None,
-            "due_date": due_date or None,
-            "created_by": user["id"],
-        }
-    ).execute()
+    row = {
+        "project_id": project_id,
+        "title": title.strip(),
+        "priority": priority,
+        "assignee_id": assignee_id or None,
+        "due_date": due_date or None,
+        "created_by": user["id"],
+    }
+    created = get_service_client().table("tasks").insert(row).execute().data
+    # The insert echoes the row back, which is where the id comes from - the
+    # event needs it to link through to the task.
+    activity_log.log_task_event(
+        activity_log.CREATED, {**row, "id": created[0]["id"] if created else None}, user["id"]
+    )
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, project_id))
 
@@ -145,16 +150,28 @@ def update_task(
     denial = _guard(request, task_id)
     if denial:
         return denial
+    user = current_user(request)
 
-    get_service_client().table("tasks").update(
-        {
-            "title": title.strip(),
-            "status": status,
-            "priority": priority,
-            "assignee_id": assignee_id or None,
-            "due_date": due_date or None,
-        }
-    ).eq("id", task_id).execute()
+    # Read before writing. _guard already fetched and memoized this row, so it
+    # costs nothing here, and it is the only chance to see what the fields were
+    # - once the update lands the cache is dropped and the old values are gone.
+    before = dict(fetch_task(task_id))
+    changes = {
+        "title": title.strip(),
+        "status": status,
+        "priority": priority,
+        "assignee_id": assignee_id or None,
+        "due_date": due_date or None,
+    }
+    get_service_client().table("tasks").update(changes).eq("id", task_id).execute()
+
+    after = {**before, **changes}
+    # One save can be a reassignment and a completion at once; each gets its own
+    # feed line. The audience spans both assignees so the person who just lost
+    # the task and the person who just got it both see it.
+    audience = activity_log.audience_for(before, after, actor_id=user["id"])
+    for kind, detail in activity_log.diff_task_events(before, after):
+        activity_log.log_task_event(kind, after, user["id"], detail=detail, audience=audience)
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
@@ -190,7 +207,13 @@ def set_task_status(
             )
         )
 
+    user = current_user(request)
+    before = dict(fetch_task(task_id))  # memoized by _guard, as in update_task
     get_service_client().table("tasks").update({"status": status}).eq("id", task_id).execute()
+
+    after = {**before, "status": status}
+    for kind, detail in activity_log.diff_task_events(before, after):
+        activity_log.log_task_event(kind, after, user["id"], detail=detail)
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
@@ -235,6 +258,16 @@ def add_task_comment(request: Request, task_id: str, body: str = Form(...)):
         get_service_client().table("task_comments").insert(
             {"task_id": task_id, "author_id": user["id"], "body": body[:4000]}
         ).execute()
+        # Also logged as an activity event so the feed is one ordered stream
+        # rather than two lists merged by date. The thread in the task modal
+        # still reads task_comments - this row carries only a snippet, for the
+        # one-line summary the feed shows.
+        activity_log.log_task_event(
+            activity_log.COMMENTED,
+            dict(fetch_task(task_id)),
+            user["id"],
+            detail={"excerpt": body[:180]},
+        )
 
     return _comments_fragment(request, task_id)
 
@@ -293,7 +326,9 @@ def archive_task(
     if denial:
         return denial
 
+    task = dict(fetch_task(task_id))
     get_service_client().table("tasks").update({"is_archived": True}).eq("id", task_id).execute()
+    activity_log.log_task_event(activity_log.ARCHIVED, task, current_user(request)["id"])
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
@@ -312,7 +347,9 @@ def unarchive_task(
     if denial:
         return denial
 
+    task = dict(fetch_task(task_id))
     get_service_client().table("tasks").update({"is_archived": False}).eq("id", task_id).execute()
+    activity_log.log_task_event(activity_log.UNARCHIVED, task, current_user(request)["id"])
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
@@ -328,6 +365,11 @@ def delete_task(
     if denial:
         return denial
 
+    # Snapshot before the row is gone: the event outlives the task, and its
+    # task_id is set to null by the delete, so the title has to be captured now
+    # or the feed line would have nothing to name.
+    task = dict(fetch_task(task_id))
     get_service_client().table("tasks").delete().eq("id", task_id).execute()
+    activity_log.log_task_event(activity_log.DELETED, task, current_user(request)["id"])
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))

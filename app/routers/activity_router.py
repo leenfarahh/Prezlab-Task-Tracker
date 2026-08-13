@@ -17,13 +17,14 @@ from app.auth import current_user, require_login
 from app.data import (
     build_activity_context,
     build_sidebar_context,
-    count_unread_comments,
+    count_unread_activity,
     fetch_profiles,
     fetch_projects,
     fetch_tasks,
     prefetch,
 )
 from app.supabase_client import get_service_client
+from app.view_helpers import STATUS_LABEL
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -50,6 +51,11 @@ def activity_page(request: Request):
         "request": request,
         "board_template": "partials/activity.html",
         "viewer": fetch_profiles().get(user["id"]),
+        # Status moves are logged with the raw enum value, so the feed needs the
+        # same labels the board uses to say "In review" rather than "in_review".
+        "status_label": STATUS_LABEL,
+        # Lets the feed say "reassigned this to you" rather than to your name.
+        "current_user_id": user["id"],
         **build_sidebar_context("activity"),
         **build_activity_context(user["id"]),
     }
@@ -80,5 +86,5 @@ def notification_bell(request: Request):
     user = current_user(request)
     return templates.TemplateResponse(
         "partials/notification_bell.html",
-        {"request": request, "unread_count": count_unread_comments(user["id"])},
+        {"request": request, "unread_count": count_unread_activity(user["id"])},
     )

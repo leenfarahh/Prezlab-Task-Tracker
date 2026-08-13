@@ -5,12 +5,25 @@
 
     <input name="name" required placeholder="Workstream name" value="{{ workstream.name }}" autofocus />
 
+    {# Both destructive actions moved behind the overflow menu, matching the task
+       modal - Delete is irreversible and has no business sitting one mis-click
+       from Save changes. #}
     <div class="modal-actions" style="justify-content: space-between;">
-      <button type="button" class="link-muted" style="color: var(--blocked);"
-              hx-get="/partials/confirm-archive-workstream-modal?workstream_id={{ workstream.id }}&active_workstream={{ active_workstream }}"
-              hx-target="#modal-root" hx-swap="innerHTML">
-        Archive
-      </button>
+      <details class="modal-menu">
+        <summary aria-label="More actions" title="More actions">&#9776;</summary>
+        <div class="modal-menu-list">
+          <button type="button" class="modal-menu-item"
+                  hx-get="/partials/confirm-archive-workstream-modal?workstream_id={{ workstream.id }}&active_workstream={{ active_workstream }}"
+                  hx-target="#modal-root" hx-swap="innerHTML">
+            Archive workstream
+          </button>
+          <button type="button" class="modal-menu-item danger"
+                  hx-get="/partials/confirm-delete-workstream-modal?workstream_id={{ workstream.id }}&active_workstream={{ active_workstream }}"
+                  hx-target="#modal-root" hx-swap="innerHTML">
+            Delete workstream
+          </button>
+        </div>
+      </details>
       <div style="display: flex; gap: 8px;">
         <button type="button" id="modal-close-edit-workstream" class="link-muted" hx-get="/partials/empty" hx-target="#modal-root" hx-swap="innerHTML">Cancel</button>
         <button type="submit" class="btn-primary">Save changes</button>

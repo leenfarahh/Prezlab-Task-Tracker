@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app import activity_log
 from app.auth import current_user, require_login
 from app.data import fetch_profiles, fetch_projects, fetch_workstreams
 from app.fragments import refreshed_fragments
@@ -137,6 +138,13 @@ async def create_tasks_batch(request: Request):
             )
 
     if rows:
-        get_service_client().table("tasks").insert(rows).execute()
+        created = get_service_client().table("tasks").insert(rows).execute().data or []
+        # Logged individually rather than as one "created 5 tasks" event, so each
+        # shows up in the feed of whoever it was assigned to. Zipped against the
+        # echoed rows for their ids; if the echo is missing or short, the events
+        # still log with a null task_id and stay readable via the title snapshot.
+        for index, row in enumerate(rows):
+            task_id = created[index]["id"] if index < len(created) else None
+            activity_log.log_task_event(activity_log.CREATED, {**row, "id": task_id}, user["id"])
 
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))

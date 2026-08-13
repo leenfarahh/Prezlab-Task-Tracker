@@ -7,46 +7,80 @@
   </div>
 
   <p class="activity-intro">
-    Comments on tasks you created or are assigned. Only you can see this page.
+    Everything that's happened to tasks you created or are assigned. Only you can see this page.
   </p>
 
   {% if events %}
   <ul class="activity-list">
     {% for e in events %}
     {# Unread is computed against the watermark captured before this page load
-       bumped it, so the highlight survives exactly one visit - which is the
-       visit that earned it. #}
+       bumped it, so the highlight survives exactly one visit - the visit that
+       earned it. Your own actions are never unread. #}
     <li class="activity-item{{ ' activity-unread' if e.is_unread else '' }}">
-      {% if e.author and e.author.avatar_url %}
-      <img src="{{ e.author.avatar_url }}" alt="{{ e.author.full_name }}" class="comment-avatar-img" />
-      {% elif e.author %}
-      <span class="avatar comment-avatar" style="background-color: {{ e.author.avatar_color }};">{{ e.author.initials }}</span>
+      {% if e.actor and e.actor.avatar_url %}
+      <img src="{{ e.actor.avatar_url }}" alt="{{ e.actor.full_name }}" class="comment-avatar-img" />
+      {% elif e.actor %}
+      <span class="avatar comment-avatar" style="background-color: {{ e.actor.avatar_color }};">{{ e.actor.initials }}</span>
       {% else %}
       <span class="avatar comment-avatar" style="background-color: var(--muted-faint);">?</span>
       {% endif %}
 
       <div class="comment-main">
         <p class="comment-meta">
-          <span class="comment-author">{{ "You" if e.is_own else (e.author.full_name if e.author else "Unknown") }}</span>
-          <span class="activity-on">commented on</span>
-          {# Opens the same task modal the board opens, scoped to the task's own
-             workstream/project so closing it lands somewhere coherent. #}
+          <span class="comment-author">{{ "You" if e.is_own else (e.actor.full_name if e.actor else "Someone") }}</span>
+
+          {# One phrase per kind. Anything unrecognised falls through to a
+             neutral verb rather than printing a raw enum at the user. #}
+          <span class="activity-on">
+            {%- if e.kind == "created" %}created
+            {%- elif e.kind == "commented" %}commented on
+            {%- elif e.kind == "completed" %}finished
+            {%- elif e.kind == "edited" %}edited
+            {%- elif e.kind == "archived" %}archived
+            {%- elif e.kind == "unarchived" %}unarchived
+            {%- elif e.kind == "deleted" %}deleted
+            {%- elif e.kind == "status_changed" %}moved
+            {%- elif e.kind == "assigned" %}reassigned
+            {%- else %}updated
+            {%- endif %}
+          </span>
+
+          {# Links to the task only while there is one to open. A deleted task
+             keeps its title from the snapshot but stops being a button, rather
+             than offering a link to an empty modal. #}
+          {% if e.task %}
           <button type="button" class="activity-task-link"
                   hx-get="/partials/task-detail-modal?task_id={{ e.task.id }}&workstream={{ e.workstream_id }}&project={{ e.task.project_id }}"
-                  hx-target="#modal-root" hx-swap="innerHTML">{{ e.task.title }}</button>
+                  hx-target="#modal-root" hx-swap="innerHTML">{{ e.title_display }}</button>
+          {% else %}
+          <span class="activity-task-gone">{{ e.title_display }}</span>
+          {% endif %}
+
+          {% if e.kind == "status_changed" and e.detail.to %}
+          <span class="activity-on">to {{ status_label.get(e.detail.to, e.detail.to) }}</span>
+          {% elif e.kind == "assigned" %}
+          <span class="activity-on">to {{ "you" if e.assignee and e.assignee.id == current_user_id else (e.assignee.full_name if e.assignee else "nobody") }}</span>
+          {% endif %}
+
           <span class="comment-time">{{ e.created_display }}</span>
         </p>
-        {% if e.project %}
-        <p class="activity-project">{{ e.project.name }}</p>
+
+        {% if e.project_display %}
+        <p class="activity-project">{{ e.project_display }}</p>
         {% endif %}
-        <p class="comment-text">{{ e.body }}</p>
+
+        {# Only comments carry body text. Everything else is fully described by
+           the line above, so there is nothing to add underneath it. #}
+        {% if e.kind == "commented" and e.excerpt %}
+        <p class="comment-text">{{ e.excerpt }}</p>
+        {% endif %}
       </div>
     </li>
     {% endfor %}
   </ul>
   {% else %}
   <p class="comment-empty">
-    Nothing yet. Comments on tasks you created or are assigned will show up here.
+    Nothing yet. Anything that happens to a task you created or are assigned shows up here.
   </p>
   {% endif %}
 </section>

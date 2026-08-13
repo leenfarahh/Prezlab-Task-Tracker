@@ -1,7 +1,7 @@
 {# Just the link and its badge - the polling attributes live on the stable
    wrapper in dashboard.html, so a swap can never rewrite the poll URL. #}
 <a href="/activity" class="bell{{ ' bell-unread' if unread_count else '' }}"
-   title="{{ unread_count }} new comment{{ '' if unread_count == 1 else 's' }} on your tasks"
+   title="{{ unread_count }} new update{{ '' if unread_count == 1 else 's' }} on your tasks"
    aria-label="Activity{{ ': ' ~ unread_count ~ ' unread' if unread_count else '' }}">
   {# Inline SVG rather than an emoji or an icon font: it inherits currentColor,
      so the unread state is a single colour change on the parent. #}

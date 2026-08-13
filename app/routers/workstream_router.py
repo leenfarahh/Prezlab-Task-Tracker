@@ -89,6 +89,87 @@ def confirm_archive_workstream_modal(request: Request, workstream_id: str, activ
     return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
 
 
+def _workstream_child_ids(workstream_id: str) -> tuple[list[str], int]:
+    """This workstream's project ids and how many tasks sit under them."""
+    service = get_service_client()
+    project_ids = [
+        p["id"]
+        for p in service.table("projects").select("id").eq("workstream_id", workstream_id).execute().data
+    ]
+    if not project_ids:
+        return [], 0
+    tasks = service.table("tasks").select("id").in_("project_id", project_ids).execute().data
+    return project_ids, len(tasks)
+
+
+@router.get("/partials/confirm-delete-workstream-modal", response_class=HTMLResponse)
+def confirm_delete_workstream_modal(
+    request: Request,
+    workstream_id: str,
+    active_workstream: str = "all",
+    origin: str = "board",
+):
+    """Confirmation for a permanent delete - see the note on the project one.
+
+    A workstream is the widest blast radius in the app, so the message names
+    both levels underneath it rather than just saying "and its contents".
+    """
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    project_ids, task_count = _workstream_child_ids(workstream_id)
+    projects = len(project_ids)
+    ctx = {
+        "request": request,
+        "title": "Delete workstream",
+        "message": (
+            f"Permanently delete this workstream, its {projects} project"
+            f"{'' if projects == 1 else 's'} and {task_count} task"
+            f"{'' if task_count == 1 else 's'}, including every comment on them? "
+            "This can't be undone - archive it instead if there's any chance "
+            "you'll want it back."
+        ),
+        "confirm_url": f"/workstreams/{workstream_id}/delete",
+        "confirm_vals": {"active_workstream": active_workstream, "origin": origin},
+        "confirm_label": "Delete",
+    }
+    return templates.TemplateResponse("partials/confirm_action_modal.html", ctx)
+
+
+@router.post("/workstreams/{workstream_id}/delete", response_class=HTMLResponse)
+def delete_workstream(
+    request: Request,
+    workstream_id: str,
+    active_workstream: str = Form("all"),
+    origin: str = Form("board"),
+):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    service = get_service_client()
+    # Bottom-up, and this order is required rather than tidy:
+    # projects.workstream_id is a plain reference with no `on delete cascade`,
+    # so deleting the workstream while any project still points at it fails on
+    # the foreign key. Tasks then have to go before their projects for the same
+    # reason at the level below. Comments and activity cascade off the tasks.
+    project_ids, _ = _workstream_child_ids(workstream_id)
+    if project_ids:
+        service.table("tasks").delete().in_("project_id", project_ids).execute()
+    service.table("projects").delete().eq("workstream_id", workstream_id).execute()
+    service.table("workstreams").delete().eq("id", workstream_id).execute()
+
+    if origin == "archive":
+        return HTMLResponse(_refreshed_archive_fragments(request))
+
+    if active_workstream == workstream_id:
+        return HTMLResponse("", headers={"HX-Redirect": "/?workstream=all"})
+
+    sidebar_ctx = {"request": request, "oob": True, **build_sidebar_context(active_workstream)}
+    return HTMLResponse(templates.get_template("partials/sidebar.html").render(sidebar_ctx))
+
+
 @router.post("/workstreams/{workstream_id}", response_class=HTMLResponse)
 def update_workstream(request: Request, workstream_id: str, name: str = Form(...), active_workstream: str = Form("all")):
     redirect = require_login(request)
