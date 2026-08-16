@@ -10,7 +10,10 @@
   {% endif %}
   <p class="task-card-title">{{ task.title }}</p>
   <div class="task-card-meta">
-    <span class="priority-pill" style="background-color: {{ priority_color }};">{{ priority_label }}</span>
+    {# The background comes from PRIORITY_COLOR, the class only carries the text
+       colour: the yellow and orange pills need dark text where the green and red
+       ones need white (see the priority block in styles.css). #}
+    <span class="priority-pill priority-{{ task.priority }}" style="background-color: {{ priority_color }};">{{ priority_label }}</span>
     {% if task.due_date_display %}
       <span class="{{ 'overdue' if task.overdue else '' }}">{{ 'Overdue ' if task.overdue else 'Due ' }}{{ task.due_date_display }}</span>
     {% endif %}

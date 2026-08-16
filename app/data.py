@@ -27,29 +27,61 @@ def fetch_profiles() -> dict[str, dict]:
     return _memo("profiles", load)
 
 
-def fetch_workstreams(archived: bool = False) -> list[dict]:
+# Workstreams and projects are read whole, once, and split by is_archived here
+# rather than by a filter in the query.
+#
+# Every page that has to name the project behind an old task asks for both the
+# live list and the archived one (see build_team_context and friends), and as two
+# filtered queries that was two round trips to Supabase - about 700ms of pure
+# latency, since these tables hold a few dozen rows and the database itself
+# answers either one instantly. One unfiltered read costs a single trip and
+# serves both callers from the same memo entry.
+#
+# Deliberately NOT done for tasks. That table grows without bound while these two
+# are capped by how many a team ever creates, and the board - the most-polled
+# view in the app - only ever wants the live ones. Making it carry every archived
+# task as well would trade a real saving on four pages for a real cost on the
+# hottest one. See build_activity_context, which needs both and prefetches them
+# side by side instead.
+
+
+def _all_workstreams() -> list[dict]:
     def load():
         return (
             get_service_client()
             .table("workstreams")
             .select("*")
-            .eq("is_archived", archived)
             .order("created_at")
             .execute()
             .data
         )
 
-    return _memo(f"workstreams:{archived}", load)
+    return _memo("workstreams:all", load)
+
+
+def fetch_workstreams(archived: bool = False) -> list[dict]:
+    return [w for w in _all_workstreams() if w["is_archived"] == archived]
+
+
+def _all_projects() -> list[dict]:
+    def load():
+        return (
+            get_service_client()
+            .table("projects")
+            .select("*")
+            .order("created_at")
+            .execute()
+            .data
+        )
+
+    return _memo("projects:all", load)
 
 
 def fetch_projects(archived: bool = False, workstream_id: str | None = None) -> list[dict]:
-    def load():
-        query = get_service_client().table("projects").select("*").eq("is_archived", archived)
-        if workstream_id:
-            query = query.eq("workstream_id", workstream_id)
-        return query.order("created_at").execute().data
-
-    return _memo(f"projects:{archived}:{workstream_id}", load)
+    rows = [p for p in _all_projects() if p["is_archived"] == archived]
+    if workstream_id:
+        rows = [p for p in rows if p["workstream_id"] == workstream_id]
+    return rows
 
 
 def fetch_task(task_id: str) -> dict:
@@ -119,7 +151,7 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
 # Events are written by app/activity_log.py, each carrying the audience it
 # belongs to: the task's creator, its assignee and whoever acted, as of the
 # moment it happened. Reading is therefore a filter on that array, not a join -
-# see _activity_rows for why that matters.
+# see fetch_activity_rows for why that matters.
 #
 # Everything here is scoped to one user id, which the routes take from the
 # session and never from a URL - there is no way to ask for someone else's.
@@ -127,7 +159,7 @@ def fetch_tasks(archived: bool = False) -> list[dict]:
 ACTIVITY_LIMIT = 100
 
 
-def _activity_rows(
+def fetch_activity_rows(
     user_id: str,
     scope: str = "",
     actor: str = "",
@@ -199,12 +231,38 @@ def count_unread_activity(user_id: str) -> int:
 
     Counts the same set the page shows by default - everything, minus your own
     actions - so clicking the bell lands on a view where the highlighted rows
-    and the number you just saw agree. Kept separate from build_activity_context
-    so the poll doesn't pay for the per-row enrichment only the page renders.
+    and the number you just saw agree.
+
+    Counted by Postgres rather than in Python. This runs on a 20s poll on every
+    page for every signed-in person, and the previous version answered it by
+    pulling the most recent hundred activity rows in full - every jsonb detail
+    blob and audience array - to then discard all but the number. A count with
+    the same two conditions pushed into the query transfers one row instead, and
+    is the difference between the badge landing with the page and arriving a
+    couple of seconds after it.
+
+    The two conditions mirror _is_unread exactly, and the null check is not
+    optional: `actor_id <> $1` is NULL rather than true for an event with no
+    recorded actor (backfilled history - see supabase/schema.sql), so a bare neq
+    would silently drop precisely the rows that ought to count.
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
-    return sum(1 for r in _activity_rows(user_id) if _is_unread(r, user_id, seen_at))
+
+    def load():
+        query = (
+            get_service_client()
+            .table("task_activity")
+            .select("id", count="exact")
+            .or_(f"actor_id.is.null,actor_id.neq.{user_id}")
+        )
+        if seen_at:
+            query = query.gt("created_at", seen_at.isoformat())
+        # limit(1) rather than 0: the count rides in a response header either
+        # way, and this asks for one id rather than a whole page of them.
+        return query.limit(1).execute().count or 0
+
+    return _memo(f"unread_count:{user_id}", load)
 
 
 def build_activity_context(
@@ -229,7 +287,7 @@ def build_activity_context(
     """
     profile = fetch_profiles().get(user_id) or {}
     seen_at = parse_timestamp(profile.get("comments_seen_at"))
-    rows = _activity_rows(user_id, scope=scope, actor=actor, kind=kind, project=project, sort=sort)
+    rows = fetch_activity_rows(user_id, scope=scope, actor=actor, kind=kind, project=project, sort=sort)
 
     profiles = fetch_profiles()
     tasks_by_id = {t["id"]: t for t in fetch_tasks()}
@@ -321,10 +379,16 @@ def build_sidebar_context(active_workstream: str, active_project: str = "all") -
 
 def build_board_context(active_workstream: str, active_project: str) -> dict:
     show_archived = active_workstream == "archived"
+    # fetch_projects is listed once for either value of show_archived: both are
+    # served from the single "projects:all" read (see _all_projects). Passing the
+    # archived variant as a second loader would not warm a second entry, it would
+    # race the first one onto the network - prefetch runs its loaders in threads
+    # and memo() takes no lock, so both would miss the empty cache and issue the
+    # same query. The same applies to fetch_workstreams everywhere below.
     prefetch(
         fetch_profiles,
         fetch_workstreams,
-        lambda: fetch_projects(archived=show_archived),
+        fetch_projects,
         lambda: fetch_tasks(archived=show_archived),
     )
     profiles = fetch_profiles()
@@ -418,9 +482,8 @@ def build_board_context(active_workstream: str, active_project: str) -> dict:
 
 def build_archived_projects_context() -> dict:
     prefetch(
-        lambda: fetch_projects(archived=True),
+        fetch_projects,
         fetch_workstreams,
-        lambda: fetch_workstreams(archived=True),
         lambda: fetch_tasks(archived=True),
     )
     projects = fetch_projects(archived=True)
@@ -434,7 +497,7 @@ def build_archived_projects_context() -> dict:
 
 
 def build_archived_workstreams_context() -> dict:
-    prefetch(lambda: fetch_workstreams(archived=True), lambda: fetch_projects(archived=True))
+    prefetch(fetch_workstreams, fetch_projects)
     workstreams = fetch_workstreams(archived=True)
     projects = fetch_projects(archived=True)
     for w in workstreams:
@@ -451,9 +514,7 @@ def build_team_context() -> dict:
     prefetch(
         fetch_profiles,
         fetch_workstreams,
-        lambda: fetch_workstreams(archived=True),
         fetch_projects,
-        lambda: fetch_projects(archived=True),
         fetch_tasks,
     )
     profiles = fetch_profiles()
@@ -501,9 +562,7 @@ def build_user_context(user_id: str) -> dict:
     prefetch(
         fetch_profiles,
         fetch_workstreams,
-        lambda: fetch_workstreams(archived=True),
         fetch_projects,
-        lambda: fetch_projects(archived=True),
         fetch_tasks,
     )
     profiles = fetch_profiles()
@@ -547,7 +606,6 @@ def build_my_day_context(user_id: str) -> dict:
     prefetch(
         fetch_profiles,
         fetch_projects,
-        lambda: fetch_projects(archived=True),
         fetch_tasks,
     )
     # Archived projects included for the same reason build_user_context includes

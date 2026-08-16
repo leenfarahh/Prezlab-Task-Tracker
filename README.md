@@ -176,6 +176,48 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 - **Cost scales with people, not usage.** One call per person per day, plus every manual refresh. There's no per-user cap on refreshes; someone can sit and press it.
 - **Yesterday's digests are kept and never read.** `daily_digests` accumulates one row per person per day with no cleanup job. Small, but it grows forever — delete old rows by hand if it ever matters.
 
+### Responsiveness
+
+Every page in this app is latency-bound, not database-bound. The tables hold a few dozen rows and Postgres answers any of these queries instantly; a round trip to Supabase costs ~350ms from here regardless of what it asks for. So the only number that matters is **how many round trips happen in series**, and the floor for any page is one.
+
+Four things were making that number higher than it needed to be, all fixed:
+
+- **`require_login` read `profiles` before the prefetch ran.** Every page route checked the session first, and that check reads `profiles`, so one query went out alone while the three it had no dependency on waited behind it. Two waves where one would do. The prefetch now runs *before* `require_login` on every page and poll route, gated on there being a session cookie at all so an anonymous request still does no database work.
+- **httpx expires idle connections after 5s; the board polls every 5s.** Every poll, and every click that followed a few seconds of reading, paid a fresh TLS handshake (~135ms, and a board render opens four connections in parallel). `keepalive_expiry` is now 60s, which is safe because the pool runs over HTTP/1.1 and httpcore drops a socket the peer has closed rather than handing it out.
+- **`projects` and `workstreams` were read once per `is_archived` value.** Four pages need both lists, so that was two round trips for two filtered halves of a table with a few dozen rows. They are now read whole once and split in Python. Deliberately not done for `tasks`, which grows without bound and whose live half is what the most-polled view wants.
+- **The `/activity` watermark write blocked the response.** Marking comments seen is a write nothing on the rendered page depends on, but it ran in front of the response and added a full round trip. It is a `BackgroundTask` now, so it happens after the body has gone out.
+
+Issuing reads in parallel also made the connection pool matter in a way it hadn't before, and shook out two defaults that were wrong for this app:
+
+- **`max_connections` defaulted to 100.** With four reads per request, a browser sitting on the board — page, board poll, sidebar poll and bell overlapping — can ask for a dozen connections at the same instant, and against a cold pool every one is a fresh TLS handshake. Supabase's edge answers a burst that size by resetting or stalling some of them, which surfaced as intermittent 500s on `/partials/sidebar` and `/partials/notification-bell` right after a server restart. The ceiling is now 16, so a burst queues briefly on a warm connection instead of opening another.
+- **supabase-py sets one blanket 120s timeout** covering connect, read and write alike. That is less a timeout than the absence of one: a stalled handshake held a request for two full minutes before failing. It is now split per phase — 5s connect, 20s read, 10s write, 5s pool — because a handshake that hasn't completed in 5s is not going to, and giving up on it quickly is what makes a retry useful rather than additive.
+- **The retry transport only caught `RemoteProtocolError`.** A connection that fails while being *opened* raises `ConnectError`, `ConnectTimeout` or `PoolTimeout` instead, none of which it handled, so those went straight out as 500s. It now retries all four, three attempts with a growing pause, and distinguishes them by whether anything reached the wire: a request that failed before being sent is safe to repeat for **any** method including POST, while `RemoteProtocolError` means it may have landed and POST is still excluded so a retried insert can't create a duplicate row.
+
+Verified by hammering the app from a cold pool with seven concurrent page and poll requests, repeated: 28/28 return 200 in ~1.5s a round, with no 120s stalls.
+
+Measured against a live Supabase project, median of 9 runs, before → after:
+
+| | round trips | before | after |
+|---|---|---|---|
+| Board | 4 | 795ms | **366ms** |
+| Board poll | 4 | 715ms | **397ms** |
+| Sidebar poll | 4 | 762ms | **372ms** |
+| Open a task | 3 | 379ms | **385ms** |
+| Team | 6 → 4 | 1945ms | **378ms** |
+| Profile | 6 → 4 | 2660ms | **379ms** |
+| Activity | 8 → 7 | 2530ms | **814ms** |
+| My day | 6 → 5 | 2855ms | **446ms** |
+| Archived | 5 → 4 | 1497ms | **377ms** |
+| Click → board refresh | 4 | 422ms | **365ms** |
+
+The worst-case tail moved further than the median did — profile's slowest run went from 7421ms to 446ms — because the tail *was* the expired connections.
+
+What's left, and why:
+
+- **The notification bell still costs two serial trips (~740ms).** The count filters on `comments_seen_at`, which lives on the profile row, so it genuinely cannot be issued until that row is read. This no longer affects anything you see: the bell icon renders with the page and only the badge number arrives late.
+- **Every page still costs one round trip.** Removing that means an RPC or a materialised view that returns a whole page's data in one call. Worth doing only if Supabase moves further away or the tables grow.
+- **Polling is unconditional.** The board (5s), sidebar (6s), team (10s) and bell (20s) keep polling in background tabs. Nothing breaks, but a person with six tabs open is generating steady load that competes with their own clicks. Gating the pollers on `document.visibilityState` is the obvious next step and was left out of this pass.
+
 ### Data and behaviour
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.

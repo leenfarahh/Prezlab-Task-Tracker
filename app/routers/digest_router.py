@@ -29,6 +29,7 @@ from app.data import (
     fetch_profiles,
     fetch_projects,
     fetch_tasks,
+    fetch_workstreams,
     prefetch,
 )
 from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, format_timestamp
@@ -85,8 +86,17 @@ def _digest_state(user: dict, my_day: dict, *, generate: bool, force: bool = Fal
 
 @router.get("/my-day", response_class=HTMLResponse)
 def my_day_page(request: Request):
-    if current_user(request):
-        prefetch(fetch_profiles, fetch_projects, fetch_tasks)
+    viewer = current_user(request)
+    if viewer:
+        # The stored digest joins the wave rather than being read after the tasks
+        # it is shown above. Nothing about loading it depends on them.
+        prefetch(
+            fetch_profiles,
+            fetch_workstreams,
+            fetch_projects,
+            fetch_tasks,
+            lambda: digest.load_cached(viewer["id"]),
+        )
 
     redirect = require_login(request)
     if redirect:
@@ -114,6 +124,7 @@ def my_day_page(request: Request):
 def my_day_digest(request: Request):
     """The digest panel on its own. Generates today's if it doesn't exist yet."""
     if current_user(request):
+        # No workstreams: this fragment renders the panel alone, with no sidebar.
         prefetch(fetch_profiles, fetch_projects, fetch_tasks)
 
     # Same reasoning as the notification bell: htmx follows redirects, so

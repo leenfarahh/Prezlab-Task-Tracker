@@ -9,9 +9,12 @@ from app.data import (
     build_board_context,
     build_sidebar_context,
     fetch_profiles,
+    fetch_projects,
     fetch_task,
     fetch_task_comment_rows,
     fetch_task_comments,
+    fetch_tasks,
+    fetch_workstreams,
     prefetch,
 )
 from app.view_helpers import PRIORITY_COLOR, PRIORITY_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
@@ -22,6 +25,21 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, workstream: str = "all", project: str = "all"):
+    # Warmed here, before require_login, and not left to build_board_context.
+    # require_login re-reads profiles to check the session still has one, so with
+    # the prefetch behind it that read went out alone and the other three queued
+    # behind a round trip they do not depend on - two waves where one would do,
+    # measured at ~340ms of dead time on every board load. Gated on there being a
+    # session at all (a cookie read, no I/O), so an anonymous request still does
+    # no database work before being redirected.
+    if current_user(request):
+        prefetch(
+            fetch_profiles,
+            fetch_workstreams,
+            fetch_projects,
+            lambda: fetch_tasks(archived=(workstream == "archived")),
+        )
+
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -83,6 +101,18 @@ def archived_workstreams_page(request: Request):
 
 @router.get("/partials/board", response_class=HTMLResponse)
 def board_partial(request: Request, workstream: str = "all", project: str = "all"):
+    # Same one-wave shape as the full page above, and it matters more here: this
+    # fires every 5 seconds for as long as a board is open, so a wasted round trip
+    # is not paid once but continuously, holding a connection each time that a
+    # click then has to queue behind.
+    if current_user(request):
+        prefetch(
+            fetch_profiles,
+            fetch_workstreams,
+            fetch_projects,
+            lambda: fetch_tasks(archived=(workstream == "archived")),
+        )
+
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -100,6 +130,9 @@ def board_partial(request: Request, workstream: str = "all", project: str = "all
 
 @router.get("/partials/sidebar", response_class=HTMLResponse)
 def sidebar_partial(request: Request, workstream: str = "all", project: str = "all"):
+    if current_user(request):
+        prefetch(fetch_profiles, fetch_workstreams, fetch_projects, fetch_tasks)
+
     redirect = require_login(request)
     if redirect:
         return redirect

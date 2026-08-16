@@ -22,11 +22,14 @@ STATUS_COLOR = {
 
 PRIORITY_LABEL = {"low": "Low", "medium": "Med", "high": "High", "urgent": "Urgent"}
 
+# Green, yellow, orange, red. Named through the stylesheet rather than given as
+# hexes here so the whole palette stays in one place - see the :root block in
+# app/static/styles.css, which also carries the contrast reasoning behind them.
 PRIORITY_COLOR = {
-    "low": "#8b93a1",
-    "medium": "var(--signal)",
-    "high": "var(--at-risk)",
-    "urgent": "var(--blocked)",
+    "low": "var(--priority-low)",
+    "medium": "var(--priority-medium)",
+    "high": "var(--priority-high)",
+    "urgent": "var(--priority-urgent)",
 }
 
 

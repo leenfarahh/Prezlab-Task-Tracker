@@ -52,14 +52,23 @@
         </button>
       </div>
       {% endif %}
-      {# Loads and refreshes itself rather than being handed an unread count.
-         This strip is shared by every page (board, team, profile, archived,
-         activity), each rendered by a different route, so context-threading the
-         count would mean touching all of them and remembering to on the next
-         one. The wrapper keeps the poll attributes; only its contents swap. #}
+      {# Fetches its own count rather than being handed one. This strip is shared
+         by every page (board, team, profile, archived, activity), each rendered
+         by a different route, so context-threading the count would mean touching
+         all of them and remembering to on the next one. The wrapper keeps the
+         poll attributes; only its contents swap.
+
+         The icon itself is rendered here though, countless, so it is in the
+         toolbar from the first paint instead of appearing a beat later once the
+         fetch lands. `unread_count = none` is set explicitly rather than left
+         undefined: /activity happens to carry a real unread_count in its page
+         context, and without this the bell would render differently on that one
+         page - showing a number the route is about to reset to zero. #}
       <span id="notif-bell" class="notif-bell"
             hx-get="/partials/notification-bell"
-            hx-trigger="load, every 20s" hx-swap="innerHTML"></span>
+            hx-trigger="load, every 20s" hx-swap="innerHTML">
+        {% with unread_count = none %}{% include "partials/notification_bell.html" %}{% endwith %}
+      </span>
       {# The avatar opens a menu rather than linking straight to the profile. It
          carries the personal routes - which are the ones the sidebar buries at
          the bottom, and the only ones reachable while the sidebar is collapsed.

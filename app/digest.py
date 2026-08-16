@@ -17,6 +17,7 @@ import hashlib
 from datetime import date, timedelta
 
 from app.gemini_client import GeminiError, write_daily_digest
+from app.request_cache import memo
 from app.supabase_client import get_service_client
 
 # The section order the page renders in and the model reads in: most pressing
@@ -132,19 +133,29 @@ def fingerprint(buckets: dict[str, list[dict]]) -> str:
 
 
 def load_cached(user_id: str, day: date | None = None) -> dict | None:
-    """Today's stored digest for this person, or None if it hasn't been written yet."""
+    """Today's stored digest for this person, or None if it hasn't been written yet.
+
+    Memoized per request so the route can hand it to prefetch() and have it go
+    out alongside the task reads instead of waiting behind them. The memo is
+    cleared by any write in the same request (see app/supabase_client.py), so a
+    refresh still reads back what it just stored.
+    """
     day = day or date.today()
-    rows = (
-        get_service_client()
-        .table("daily_digests")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("digest_date", day.isoformat())
-        .limit(1)
-        .execute()
-        .data
-    )
-    return rows[0] if rows else None
+
+    def load():
+        rows = (
+            get_service_client()
+            .table("daily_digests")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("digest_date", day.isoformat())
+            .limit(1)
+            .execute()
+            .data
+        )
+        return rows[0] if rows else None
+
+    return memo(f"daily_digest:{user_id}:{day.isoformat()}", load)
 
 
 def _store(user_id: str, day: date, digest: dict, task_fingerprint: str) -> dict:

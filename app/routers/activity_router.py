@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from starlette.background import BackgroundTask
 
 from app import activity_log
 from app.auth import current_user, require_login
@@ -19,9 +20,11 @@ from app.data import (
     build_activity_context,
     build_sidebar_context,
     count_unread_activity,
+    fetch_activity_rows,
     fetch_profiles,
     fetch_projects,
     fetch_tasks,
+    fetch_workstreams,
     prefetch,
 )
 from app.supabase_client import get_service_client
@@ -47,24 +50,45 @@ def activity_page(
     project: str = "",
     sort: str = "newest",
 ):
-    if current_user(request):
-        prefetch(fetch_profiles, fetch_tasks, fetch_projects)
-
-    redirect = require_login(request)
-    if redirect:
-        return redirect
-    user = current_user(request)
-
     # kind and sort go into the query, so they are checked against the values
     # this app actually defines rather than passed through. actor and project
     # are uuids used as equality filters - a bad one matches nothing, which is
     # the correct outcome and needs no separate guard.
+    #
+    # Normalised up here, above the prefetch, purely so the prefetch can include
+    # the activity query itself - it is keyed on these values, and warming it
+    # under an unvalidated key would fill the cache with an entry the render then
+    # misses.
     if kind not in activity_log.KIND_LABELS:
         kind = ""
     if sort not in ("newest", "oldest"):
         sort = "newest"
     if scope != "mine":
         scope = ""
+
+    viewer = current_user(request)
+    if viewer:
+        # Every read this page needs, in one wave. The archived tasks are here
+        # rather than left to build_activity_context because an event can name a
+        # task that has since been archived, so the page reads both lists either
+        # way - and reaching the second one only after this prefetch had finished
+        # made it a serial round trip on the slowest page in the app. The
+        # activity query joins them for the same reason.
+        prefetch(
+            fetch_profiles,
+            fetch_tasks,
+            lambda: fetch_tasks(archived=True),
+            fetch_projects,
+            fetch_workstreams,
+            lambda: fetch_activity_rows(
+                viewer["id"], scope=scope, actor=actor, kind=kind, project=project, sort=sort
+            ),
+        )
+
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+    user = current_user(request)
 
     ctx = {
         "request": request,
@@ -95,15 +119,30 @@ def activity_page(
     # constructor, so the HTML above still carries the old watermark and can
     # mark which entries were new; moving this earlier would clear the
     # highlighting on the very page that exists to show it.
-    _mark_comments_seen(user["id"])
+    #
+    # As a background task rather than a plain call, so it runs after the body
+    # has gone out instead of in front of it. It is a write nothing on the page
+    # depends on - the HTML is already final by this point - and as a blocking
+    # call it added a full round trip to Supabase, about 360ms, to how long this
+    # page took to appear. Failure here costs a stale bell until the next visit,
+    # which is the right thing to trade for the page arriving sooner.
+    response.background = BackgroundTask(_mark_comments_seen, user["id"])
     return response
 
 
 @router.get("/partials/notification-bell", response_class=HTMLResponse)
 def notification_bell(request: Request):
-    """The bell and its unread badge, polled from the top bar on every page."""
+    """The bell and its unread badge, polled from the top bar on every page.
+
+    Reads profiles and nothing else. It used to prefetch the whole tasks table
+    alongside it, which no part of the count has ever touched - a full table read
+    every 20 seconds per open page, for a number derived entirely from
+    task_activity and one timestamp on the profile.
+    """
     if current_user(request):
-        prefetch(fetch_profiles, fetch_tasks)
+        # Not a prefetch: with one loader there is nothing to run it against, and
+        # prefetch() no-ops below two anyway.
+        fetch_profiles()
 
     # A poll keeps firing after a session expires, and htmx follows redirects -
     # returning require_login's would swap a whole login page into the corner of

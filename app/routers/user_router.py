@@ -5,7 +5,16 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import current_user, require_login
-from app.data import build_sidebar_context, build_team_context, build_user_context, fetch_profiles
+from app.data import (
+    build_sidebar_context,
+    build_team_context,
+    build_user_context,
+    fetch_profiles,
+    fetch_projects,
+    fetch_tasks,
+    fetch_workstreams,
+    prefetch,
+)
 from app.supabase_client import get_service_client
 from app.view_helpers import STATUS_COLOR, STATUS_LABEL, STATUS_ORDER
 
@@ -30,6 +39,10 @@ def _user_ctx(request: Request, user_id: str) -> dict:
 
 @router.get("/team", response_class=HTMLResponse)
 def team_page(request: Request):
+    # Before require_login on purpose - see the note on board_router.dashboard.
+    if current_user(request):
+        prefetch(fetch_profiles, fetch_workstreams, fetch_projects, fetch_tasks)
+
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -46,6 +59,9 @@ def team_page(request: Request):
 
 @router.get("/partials/team", response_class=HTMLResponse)
 def team_partial(request: Request):
+    if current_user(request):
+        prefetch(fetch_profiles, fetch_projects, fetch_tasks)
+
     redirect = require_login(request)
     if redirect:
         return redirect
@@ -54,6 +70,9 @@ def team_partial(request: Request):
 
 @router.get("/users/{user_id}", response_class=HTMLResponse)
 def user_page(request: Request, user_id: str):
+    if current_user(request):
+        prefetch(fetch_profiles, fetch_workstreams, fetch_projects, fetch_tasks)
+
     redirect = require_login(request)
     if redirect:
         return redirect

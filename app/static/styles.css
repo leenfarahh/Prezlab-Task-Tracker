@@ -23,6 +23,19 @@
   --tint-blocked: #f8dcdc;
   --tint-in-review: #e6dff5;
   --tint-done: #dcefe4;
+  /* Priority runs a plain green-to-red ramp, independent of the status hues
+     above: a task's priority and its status are different questions, and the
+     pill sits right next to the status-tinted card, so sharing a palette would
+     make the two read as one signal.
+     Each is the deepest shade that still reads as its colour, because the pill
+     is 10px text - anything lighter turns the label to mush. That is also why
+     the foreground is not uniform: white on this yellow is 1.97:1 and on this
+     orange 2.99:1, both illegible, so those two take ink instead (8.2:1 and
+     5.4:1). Green and red take white, at 5.0:1 and 5.3:1. */
+  --priority-low: #2f7d57;
+  --priority-medium: #e8b021;
+  --priority-high: #e07b1f;
+  --priority-urgent: #c23a3a;
   --font-sans: "Figtree", -apple-system, "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
 }
@@ -380,6 +393,9 @@ body.dragging .task-card { pointer-events: none; }
   padding: 2px 8px;
   flex-shrink: 0;
 }
+/* The two light pills. White on either is under 3:1 and unreadable at 10px. */
+.priority-pill.priority-medium,
+.priority-pill.priority-high { color: var(--ink); }
 .avatar {
   width: 22px;
   height: 22px;
