@@ -108,6 +108,9 @@ html.sidebar-collapsed .sidebar-expand-btn { display: inline-flex; }
 }
 .sidebar-item:hover { background: var(--hover-tint); }
 .sidebar-item.active { background: var(--active-tint); color: var(--ink); font-weight: 500; }
+/* Log out, matching .modal-menu-item.danger in the account menu: the same
+   action reads the same in both places it appears. */
+.sidebar-item.danger { color: var(--blocked); }
 
 .sidebar-row {
   display: flex;
