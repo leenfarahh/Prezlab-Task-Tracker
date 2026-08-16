@@ -12,6 +12,7 @@ from app.routers import (
     activity_router,
     auth_router,
     board_router,
+    digest_router,
     nl_task_router,
     project_router,
     tasks_router,
@@ -32,6 +33,7 @@ for _templates in (
     activity_router.templates,
     auth_router.templates,
     board_router.templates,
+    digest_router.templates,
     nl_task_router.templates,
     project_router.templates,
     tasks_router.templates,
@@ -53,6 +55,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(activity_router.router)
 app.include_router(auth_router.router)
 app.include_router(board_router.router)
+app.include_router(digest_router.router)
 app.include_router(nl_task_router.router)
 app.include_router(project_router.router)
 app.include_router(tasks_router.router)

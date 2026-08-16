@@ -16,7 +16,7 @@
     <div class="board-utility">
       <button type="button" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Expand sidebar">&#9776;</button>
       {# Create actions sit here rather than in the board's own topbar so they
-         land next to the profile shortcut, and both are wrapped together so a
+         land next to the account menu, and both are wrapped together so a
          single auto margin carries the pair to the right edge. Only one of the
          first three applies at a time: which "+ New ..." you get depends on how
          far into the tree the current view is scoped. Note this strip is outside
@@ -60,14 +60,33 @@
       <span id="notif-bell" class="notif-bell"
             hx-get="/partials/notification-bell"
             hx-trigger="load, every 20s" hx-swap="innerHTML"></span>
+      {# The avatar opens a menu rather than linking straight to the profile. It
+         carries the personal routes - which are the ones the sidebar buries at
+         the bottom, and the only ones reachable while the sidebar is collapsed.
+         Same details.modal-menu machinery the task modal's overflow menu uses,
+         so the click-outside-to-close handler in base.html already covers it. #}
       {% if viewer %}
-      <a href="/users/{{ viewer.id }}" class="profile-btn" title="{{ viewer.full_name }}">
-        {% if viewer.avatar_url %}
-        <img src="{{ viewer.avatar_url }}" alt="{{ viewer.full_name }}" class="profile-avatar-img" />
-        {% else %}
-        <span class="avatar profile-avatar" style="background-color: {{ viewer.avatar_color }};">{{ viewer.initials }}</span>
-        {% endif %}
-      </a>
+      <details class="modal-menu profile-menu">
+        <summary class="profile-btn" title="{{ viewer.full_name }}" aria-label="Account menu">
+          {% if viewer.avatar_url %}
+          <img src="{{ viewer.avatar_url }}" alt="{{ viewer.full_name }}" class="profile-avatar-img" />
+          {% else %}
+          <span class="avatar profile-avatar" style="background-color: {{ viewer.avatar_color }};">{{ viewer.initials }}</span>
+          {% endif %}
+        </summary>
+        <div class="modal-menu-list">
+          <p class="profile-menu-name">{{ viewer.full_name }}</p>
+          <a class="modal-menu-item" href="/my-day">My day</a>
+          <a class="modal-menu-item" href="/activity">Activity</a>
+          <a class="modal-menu-item" href="/users/{{ viewer.id }}">My profile</a>
+          {# The same POST the sidebar's logout uses. Kept as a form rather than
+             a link: logging out is a state change, and a GET would let a
+             prefetch or a stray reload sign someone out. #}
+          <form method="post" action="/logout">
+            <button type="submit" class="modal-menu-item danger">Log out</button>
+          </form>
+        </div>
+      </details>
       {% endif %}
       </div>
     </div>

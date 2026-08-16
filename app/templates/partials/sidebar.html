@@ -12,6 +12,11 @@
 <div id="sidebar-tree" {% if oob %}hx-swap-oob="morph"{% endif %}>
   <p class="eyebrow" style="margin-bottom: 16px;">AI Team</p>
 
+  {# First in the list, above the shared views: this is the one you open at the
+     start of the day, and it is about your own work rather than the team's. #}
+  <a href="/my-day"     class="sidebar-item {{ 'active' if active_workstream == 'my_day' else '' }}">
+    My day
+  </a>
   <a href="/team"     class="sidebar-item {{ 'active' if active_workstream == 'team' else '' }}">
     Team
   </a>
@@ -107,7 +112,9 @@
   </a>
 
   {# Grouped with My profile rather than with the shared views above, because
-     both are personal: this feed is built for the signed-in user only. #}
+     both are personal: this feed is built for the signed-in user only. My day is
+     personal too but sits at the top of the panel instead - it is the first
+     thing you open, not something to scroll past the whole tree to reach. #}
   <a href="/activity"     class="sidebar-item {{ 'active' if active_workstream == 'activity' else '' }}"
      style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line);">
     Activity

@@ -493,6 +493,24 @@ body.dragging .task-card { pointer-events: none; }
 }
 .modal-menu-item:hover { background: var(--hover-tint); }
 .modal-menu-item.danger { color: var(--blocked); }
+/* Menu items are <button> inside the task modal and <a> in the profile menu. */
+a.modal-menu-item { text-decoration: none; }
+
+/* The account menu hangs off the avatar in the top-right strip, so it opens
+   downward and right-aligned - the base .modal-menu-list drops upward from a
+   footer button and would render off the top of the page here. */
+.profile-menu { flex-shrink: 0; }
+.profile-menu > summary { padding: 0; border-radius: 999px; }
+.profile-menu > summary:hover, .profile-menu[open] > summary { background: none; filter: brightness(1.15); }
+.profile-menu .modal-menu-list { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; min-width: 168px; z-index: 20; }
+.profile-menu-name {
+  margin: 0 0 4px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
 
 /* Notification bell in the top bar. The wrapper is always present (it carries
    the poll) and is empty until the first response lands, so it holds its own
@@ -712,3 +730,34 @@ body.dragging .task-card { pointer-events: none; }
 .login-footer { padding: 16px 24px; border-top: 1px solid var(--line); text-align: center; }
 .login-footer p { margin: 0; font-size: 12px; color: var(--muted-faint); }
 .notice-box { border: 1px solid var(--line); border-radius: 3px; padding: 14px; font-size: 14px; color: rgba(0,37,40,0.85); background: var(--panel); }
+
+/* My day. The generated digest panel, then the same task cards the board uses,
+   grouped by deadline instead of by status. */
+.digest-panel {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 16px 18px;
+  margin-bottom: 22px;
+}
+.digest-panel .eyebrow { display: block; margin-bottom: 10px; }
+.digest-headline { font-size: 16px; font-weight: 600; line-height: 1.35; margin: 0 0 8px; }
+.digest-summary { font-size: 14px; line-height: 1.55; color: rgba(0,37,40,0.85); margin: 0; }
+/* Deliberately not a bulleted list of the tasks below it - these are the two or
+   three the digest singled out, so they get a marker that reads as emphasis
+   rather than as another inventory. */
+.digest-focus { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.digest-focus li { font-size: 13px; line-height: 1.45; padding-left: 14px; position: relative; }
+.digest-focus li::before { content: ""; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--signal); }
+.digest-waiting { font-size: 14px; color: var(--muted-faint); margin: 0; }
+.digest-error { font-size: 13px; color: var(--blocked); margin: 0 0 10px; }
+.digest-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.digest-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-faint); }
+.digest-refresh { flex-shrink: 0; }
+.digest-stale { font-size: 12px; color: var(--at-risk); margin: 8px 0 0; }
+
+.my-day-section { margin-bottom: 22px; }
+.my-day-section .column-header { padding: 0 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+/* Wraps into as many columns as fit rather than the board's fixed six: a section
+   here holds anything from one card to a dozen. */
+.my-day-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }

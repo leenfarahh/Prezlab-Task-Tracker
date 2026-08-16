@@ -490,6 +490,41 @@ drop policy if exists "auth_tokens no client access" on public.auth_tokens;
 create policy "auth_tokens no client access" on public.auth_tokens
   for all using (false) with check (false);
 
+-- ---------- Daily digests ----------
+-- One generated morning digest per person per day (app/digest.py). Cached in a
+-- table rather than in process memory so it survives a restart and is shared
+-- across workers - the point of "once a day" is that the same person doesn't
+-- pay for a second generation, which an in-memory cache can't promise.
+--
+-- Private to its subject by construction: every read is keyed by the session's
+-- own user_id, and nothing joins this table into a shared view.
+--
+-- Rows are replaced, not appended: (user_id, digest_date) is unique and a manual
+-- refresh upserts over the day's row. Yesterday's digest is kept because it
+-- costs nothing, but nothing reads it - the digest is about today.
+
+create table if not exists public.daily_digests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  digest_date date not null,
+  headline text not null default '',
+  summary text not null,
+  focus text[] not null default '{}',
+  -- What the tasks looked like when this was written. A digest that no longer
+  -- matches the board is worse than no digest, so the page compares this against
+  -- the current tasks and flags a stale one rather than quietly showing it.
+  task_fingerprint text not null default '',
+  created_at timestamptz not null default now(),
+  unique (user_id, digest_date)
+);
+
+create index if not exists daily_digests_user_date_idx on public.daily_digests (user_id, digest_date desc);
+
+alter table public.daily_digests enable row level security;
+drop policy if exists "daily_digests no client access" on public.daily_digests;
+create policy "daily_digests no client access" on public.daily_digests
+  for all using (false) with check (false);
+
 -- ---------- Dropped columns from earlier revisions ----------
 -- All no-ops on a fresh project. Named on both tables because the swap above
 -- means either name could be holding a column an older revision put on the

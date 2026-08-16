@@ -1,3 +1,4 @@
+from app import digest
 from app.request_cache import memo as _memo
 from app.request_cache import prefetch
 from app.supabase_client import get_service_client
@@ -530,4 +531,43 @@ def build_user_context(user_id: str) -> dict:
         "segments": health_strip_segments(tasks),
         "total_tasks": len(tasks),
         "done_count": sum(1 for t in tasks if t["status"] == "done"),
+    }
+
+
+def build_my_day_context(user_id: str) -> dict:
+    """One person's own tasks, bucketed by when they are due rather than by status.
+
+    Grouped by deadline because this view answers "what do I do today", which
+    status columns don't: an in-progress task due in five days and an in-progress
+    task that was due last week sit in the same column on the board.
+
+    Scoped to the signed-in user by the caller. Nothing here is a shared view, so
+    unlike build_team_context it never resolves other people's assignments.
+    """
+    prefetch(
+        fetch_profiles,
+        fetch_projects,
+        lambda: fetch_projects(archived=True),
+        fetch_tasks,
+    )
+    # Archived projects included for the same reason build_user_context includes
+    # them: a task under an archived project still needs a real name to show.
+    projects_by_id = {p["id"]: p for p in fetch_projects() + fetch_projects(archived=True)}
+
+    tasks = [t for t in fetch_tasks() if t["assignee_id"] == user_id]
+    for t in tasks:
+        t["overdue"] = is_overdue(t)
+        t["due_date_display"] = format_due_date(t["due_date"]) if t["due_date"] else None
+        project = projects_by_id.get(t["project_id"])
+        t["project_name"] = project["name"] if project else "Unknown"
+        t["workstream_id"] = project["workstream_id"] if project else None
+
+    buckets = digest.bucket_tasks(tasks)
+    return {
+        "buckets": buckets,
+        "sections": [
+            {"key": key, "label": label, "tasks": buckets[key]}
+            for key, label in digest.SECTION_LABELS
+        ],
+        "open_count": sum(len(v) for v in buckets.values()),
     }

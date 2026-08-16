@@ -51,7 +51,12 @@ def health_strip_segments(tasks: list[dict]) -> list[dict]:
 
 
 def is_overdue(task: dict) -> bool:
-    if not task.get("due_date"):
+    """A task is overdue only while it is still outstanding.
+
+    A finished task that landed after its due date is history, not a thing to
+    chase, so "done" clears the flag regardless of the date.
+    """
+    if not task.get("due_date") or task.get("status") == "done":
         return False
     return task["due_date"] < date.today().isoformat()
 
@@ -132,7 +137,9 @@ def date_buckets(tasks: list[dict]) -> dict:
             continue
         d = date.fromisoformat(t["due_date"])
         if d < today:
-            buckets["overdue"] += 1
+            # Only counted when still outstanding - see is_overdue.
+            if is_overdue(t):
+                buckets["overdue"] += 1
         elif d <= week_end:
             buckets["due_this_week"] += 1
         else:

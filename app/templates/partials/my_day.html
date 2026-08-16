@@ -1,0 +1,45 @@
+{% import "partials/task_card.html" as tc %}
+{# The /my-day page body, rendered as dashboard.html's board_template like every
+   other non-board page. Private to whoever is signed in - the route takes no
+   user id at all, so there is nothing to tamper with. #}
+<section class="board-section">
+  <div class="board-header">
+    <h1>My day</h1>
+  </div>
+
+  <p class="activity-intro">
+    Your own tasks for today and the rest of the week, and a written read on them.
+    Only you can see this page.
+  </p>
+
+  {% include "partials/my_day_digest.html" %}
+
+  {% if open_count %}
+  {# Grouped by deadline, not by status: this page answers "what do I do today",
+     and the board already covers "what state is everything in". Empty sections
+     are dropped rather than shown at zero - four headings for two tasks reads as
+     more structure than there is. #}
+  {% for s in sections %}
+  {% if s.tasks %}
+  <section class="my-day-section">
+    <div class="column-header">
+      <span>{{ s.label }}</span>
+      <span class="column-count">{{ s.tasks|length }}</span>
+    </div>
+    <div class="my-day-cards">
+      {% for t in s.tasks %}
+      {# No assignee avatar: every task here is yours, so it would be the same
+         face on every card. active_project is "all" so each card still names its
+         project, which is the context that IS missing on a cross-project list. #}
+      {{ tc.task_card(t, none, priority_label[t.priority], priority_color[t.priority], t.workstream_id or 'all', 'all') }}
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% endfor %}
+  {% else %}
+  <p class="comment-empty">
+    Nothing assigned to you is open, overdue, or due in the next week.
+  </p>
+  {% endif %}
+</section>

@@ -9,6 +9,8 @@ See also:
 
 **Status: tested, not deployed.** The app has been run locally end-to-end against placeholder credentials: routes all wire up correctly, the login/error paths were exercised and two real bugs were found and fixed in the process (see the stack-decisions doc), and a global error handler was added so a bad key shows a clean message instead of a Python traceback. It has not been run against a real Supabase project, since that needs your own account. The same applies to "New task from text" — the validation and review paths were exercised, but the live Gemini call needs your own API key.
 
+"My day" was exercised the same way: its routes, bucketing, caching, staleness and error paths were driven against stubbed data, and its Gemini prompt was run once for real against invented tasks to confirm the response shape and tone. What has **not** been run is the `daily_digests` table itself — re-run `supabase/schema.sql` before opening `/my-day`, or the page will error on its first read.
+
 ## 1. Create the Supabase project
 
 Same as the JS version:
@@ -85,6 +87,18 @@ How it works: `app/gemini_client.py` sends the note to Gemini along with the cur
 
 Nothing is written to the database directly from the model. Every run lands on a review screen where each draft can be edited, unchecked, or reassigned, and project is required before the batch can be created. That review step is deliberate and shouldn't be optimised away: it's the thing that keeps a wrong guess from silently becoming a real task on someone's board.
 
+## My day
+
+`/my-day` — top of the sidebar, above Team, and also the first item in the account menu behind your avatar. Your own open tasks grouped by **when they're due** rather than by status (Overdue, Today, Rest of this week, No due date), with a short written read on them at the top: a headline leading with whatever is most at risk, two to four sentences on the shape of the day and week, and up to three tasks worth acting on first.
+
+Grouped by deadline on purpose. The board already answers "what state is everything in"; it can't answer "what do I do today", because an in-progress task due Friday and an in-progress task that was due last week sit in the same column. Done tasks and anything due beyond this week are left out entirely — neither is work for today.
+
+**It is private.** Like `/activity`, none of the three routes takes a user id: the digest is built for whoever is in the session, so there is no `/users/{id}/my-day` and no id to swap for a teammate's. Nobody can see anyone else's.
+
+Generated **once a day, on your first visit**, and cached in `daily_digests` (`supabase/schema.sql` — re-run it before using this feature, the table is new). Lazy generation rather than a scheduler: this app has no worker process to run one in, and a digest nobody opens is an API call nobody needed. Caching in Postgres rather than in memory is what makes "once a day" true across a restart or a second worker.
+
+Two things keep it honest. The page never blocks on the model: task lists render immediately, and only when nothing is cached does the panel fetch itself (`hx-trigger="load"`, once — deliberately **not** on any of the app's pollers, which would bill an LLM call every few seconds). And each digest stores a fingerprint of the tasks it was written from, so if work is added, reassigned or rescheduled afterwards the panel says *"Your tasks have changed since this was written"* rather than quietly serving a stale read. **Refresh** regenerates over the top of it. A person with nothing open gets a fixed sentence and no API call at all.
+
 ## Moving a task between statuses
 
 Two ways, both kept: open the card and change the Status field, or drag the card into another column. The drag posts to `POST /tasks/{id}/status` (status only, not the whole task) and comes back as the same board+sidebar out-of-band refresh every other write uses. Same permission rule as the modal — creator or assignee only — so a refused drag returns the permission modal and the card snaps back.
@@ -151,13 +165,22 @@ Login sets two things: a signed session cookie (`{id, email, full_name}`, short-
 - **No spend controls.** There's no rate limit, no per-user quota, and no cap on prompt length beyond the browser's — a pasted wall of text is sent as-is. Set budget alerts on the Google AI Studio key rather than relying on the app to restrain itself.
 - **The default model id is unverified.** `GEMINI_MODEL` defaults to `gemini-3.1-flash-lite`. Model names get revised and retired; confirm it still exists at ai.google.dev before deploying, or the feature fails at the first call.
 
+### "My day" digest (Gemini)
+
+- **Your task list leaves our infrastructure.** Every open task the digest covers — title, project name, status, priority, due date — is sent to Google's Generative Language API on the first view of each day. Same decision as "New task from text" above, but it happens *without anyone typing anything*: opening the page is the trigger. If that's not acceptable for client work, the honest fix is to not ship the page, not to shorten the prompt.
+- **It's a model's read, not a calculation.** The counts and dates under it are real; the sentences about them are generated and can misjudge what matters. The panel is labelled as written from your tasks for that reason. Nothing on the page is derived *from* the digest — the task lists are built independently, so a bad digest is a bad paragraph, not a wrong board.
+- **Stale is flagged, not prevented.** The fingerprint catches added, reassigned, rescheduled and status-changed tasks. It deliberately ignores edits that wouldn't change the read (a description reworded, a comment posted), so those won't prompt a refresh.
+- **One synchronous call, no retry**, same as the other Gemini feature: up to 30 seconds, and a failure shows the error in the panel with a **Try again** button. The task lists below it are unaffected — the page is still useful with the digest broken.
+- **Cost scales with people, not usage.** One call per person per day, plus every manual refresh. There's no per-user cap on refreshes; someone can sit and press it.
+- **Yesterday's digests are kept and never read.** `daily_digests` accumulates one row per person per day with no cleanup job. Small, but it grows forever — delete old rows by hand if it ever matters.
+
 ### Data and behaviour
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.
 - **Drag and drop is pointer-only.** It's built on the HTML5 drag events, so there's no keyboard equivalent and it does nothing useful on touch. That's why the Status field stays in the edit modal — it, not the drag, is the accessible path, and removing it would make the board unusable without a mouse.
 - **A dropped card moves before the server confirms it.** The card is repositioned immediately and corrected from the response, so for the length of one round trip the board shows the move as done. A refusal or a network error pulls a fresh board straight away, but a drop that fails will visibly undo itself rather than never appearing to happen.
 - **Unarchiving a workstream is not an exact undo.** Archiving a workstream archives its projects and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the workstream was archived comes back out too. Rare, but surprising when it happens.
-- **`docs/llm-feature-proposal.md` describes a feature this version doesn't have.** It argues for the JS version's Workstream Pulse digest; the LLM feature actually built here is "New task from text". Read it as background on the decision, not as a description of the app.
+- **`docs/llm-feature-proposal.md` doesn't match what was built.** It argues for the JS version's Workstream Pulse: a digest of a *whole workstream*, shown to the team, stored in a `pulse_digests` table. What exists here is "New task from text" plus "My day" — a digest of *one person's own tasks*, visible only to them, in `daily_digests`. The writing constraints it proposes (lead with risk, invent no concern, plain sentences, a word cap) are the ones My day's prompt actually uses. Read it as background on the decision, not as a description of the app.
 - **No comments/notifications** — same scope cut as the JS version, contained follow-ups rather than schema changes.
 
 Flag any of these in a review round if they turn out to matter more than expected. Most are contained changes rather than rewrites — the exception is the Gemini data-sharing point, which is a decision to make rather than a bug to fix.

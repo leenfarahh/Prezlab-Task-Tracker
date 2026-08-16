@@ -1,0 +1,64 @@
+{# The generated digest panel, rendered inline by /my-day and swapped whole by
+   /partials/my-day-digest and /my-day/refresh. Both of those replace this
+   element outerHTML, so the id and the hx attributes have to live on the root
+   here rather than on a wrapper in the page - a wrapper would keep the "load"
+   trigger around after the swap and fetch a second time.
+
+   Three states, set by _digest_state in app/routers/digest_router.py: pending
+   (nothing written yet today, so this fetches itself), error, and ready. #}
+<section id="my-day-digest" class="digest-panel"
+         {% if d.state == "pending" %}
+         hx-get="/partials/my-day-digest" hx-trigger="load" hx-swap="outerHTML"
+         {% endif %}>
+  <p class="eyebrow">Your digest</p>
+
+  {% if d.state == "pending" %}
+  {# Says what is happening rather than showing a bare spinner: this waits on a
+     model call that can take a few seconds, which reads as a hung page if the
+     panel just sits there empty. #}
+  <p class="digest-waiting">Reading your board...</p>
+
+  {% elif d.state == "error" %}
+  {# Shown as-is, same as the "new task from text" modal does with a GeminiError:
+     the message names the actual cause (no API key, request failed), which is
+     more use than a generic apology. The task lists below are unaffected. #}
+  <p class="digest-error">{{ d.error }}</p>
+  <button type="button" class="btn-ghost digest-refresh"
+          hx-post="/my-day/refresh" hx-target="#my-day-digest" hx-swap="outerHTML">
+    Try again
+  </button>
+
+  {% else %}
+  {% if d.digest.headline %}<p class="digest-headline">{{ d.digest.headline }}</p>{% endif %}
+  <p class="digest-summary">{{ d.digest.summary }}</p>
+
+  {% if d.digest.focus %}
+  <ul class="digest-focus">
+    {% for item in d.digest.focus %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {# Nothing to refresh on an empty plate - the sentence above is written here,
+     not generated, and would come back identical. #}
+  {% if not d.empty %}
+  <div class="digest-foot">
+    <span class="digest-note">
+      {# Named as generated on purpose. This is a model's read of the rows below,
+         not a computed figure, and the reader should weigh it as such. #}
+      Written from your open tasks{% if d.written %} &middot; {{ d.written }}{% endif %}
+    </span>
+    <button type="button" class="btn-ghost digest-refresh"
+            hx-post="/my-day/refresh" hx-target="#my-day-digest" hx-swap="outerHTML">
+      Refresh
+    </button>
+  </div>
+  {% if d.stale %}
+  {# The one case where a once-a-day digest is actively misleading: the tasks it
+     described have moved since. Says so rather than quietly serving it. #}
+  <p class="digest-stale">Your tasks have changed since this was written.</p>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</section>
