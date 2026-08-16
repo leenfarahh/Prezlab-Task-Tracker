@@ -10,7 +10,7 @@
    lists its projects as subtabs, whereas every project in the app as one flat
    strip would be unreadable at any real size. #}
 <nav class="nav-tabs" aria-label="Back to workstreams">
-  <a href="/?workstream=all" class="tab">&#8592; All workstreams</a>
+  <a href="/?workstream=all" class="tab">All workstreams</a>
   {% for w in nav_workstreams %}
   <a href="/?workstream={{ w.id }}" class="tab">{{ w.name }}</a>
   {% endfor %}
