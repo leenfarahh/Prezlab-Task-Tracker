@@ -126,12 +126,32 @@ Only ever use ids that appear in the lists above, exactly as written. Never inve
     return drafts
 
 
+def _due_phrase(due_date: str | None) -> str:
+    """"2026-08-13" -> "3 days overdue" / "due today" / "due in 4 days".
+
+    Relative rather than absolute so the model never has to subtract dates to
+    work out how pressing something is - that arithmetic is exactly the kind it
+    gets quietly wrong, and every judgement it makes here rests on it.
+    """
+    if not due_date:
+        return "no due date"
+    days = (date.fromisoformat(due_date) - date.today()).days
+    if days == 0:
+        return "due today"
+    if days == 1:
+        return "due tomorrow"
+    if days > 1:
+        return f"due in {days} days"
+    return "1 day overdue" if days == -1 else f"{abs(days)} days overdue"
+
+
 def _task_line(task: dict) -> str:
-    bits = [PRIORITY_LABEL.get(task["priority"], task["priority"])]
-    bits.append(STATUS_LABEL.get(task["status"], task["status"]))
-    if task.get("due_date"):
-        bits.append(f"due {task['due_date']}")
-    return f"- {task['title']} ({task.get('project_name', 'Unknown')}) - {', '.join(bits)}"
+    priority = PRIORITY_LABEL.get(task["priority"], task["priority"])
+    status = STATUS_LABEL.get(task["status"], task["status"])
+    return (
+        f"- {task['title']} ({task.get('project_name', 'Unknown')})"
+        f" - {priority} priority, {status}, {_due_phrase(task.get('due_date'))}"
+    )
 
 
 def _section(heading: str, tasks: list[dict]) -> str:
@@ -146,12 +166,18 @@ def write_daily_digest(
     due_today: list[dict],
     due_this_week: list[dict],
     no_due_date: list[dict],
+    ranked: list[dict] | None = None,
 ) -> dict:
     """Calls Gemini for one person's read on their day, as headline/summary/focus.
 
     The four lists are already bucketed by the caller so the model never has to
-    do date arithmetic - it only has to judge what matters. Everything passed
-    in is that one person's open work, since the digest is private to them.
+    do date arithmetic - it only has to judge what matters. `ranked` is those
+    same tasks re-ordered by urgency and deadline together (digest.rank_tasks),
+    which is what stops the digest reading as a list of deadlines: a task marked
+    urgent still leads even when something duller is due sooner.
+
+    Everything passed in is that one person's open work, since the digest is
+    private to them.
     """
     instructions = f"""You write a short private morning digest for one person about their own
 tasks in a work tracker. You are writing to {person_name} directly - use "you", never their name
@@ -159,27 +185,45 @@ in the third person.
 
 Today is {date.today().strftime('%A, %d %B %Y')}.
 
+Priority runs Urgent, High, Med, Low, and it matters as much as the deadline does. A task marked
+Urgent or High that is due later this week is more pressing than a Low or Med task that has already
+slipped - do not treat "overdue" as automatically the most important thing on the list. The "What to
+act on first" list below already weighs the two together; work from that order rather than
+re-deriving it, and say what makes something pressing when it is the priority rather than the date.
+
 Return:
-- headline: one sentence, at most 12 words, leading with whatever is most at risk. If nothing is
-  at risk, say that plainly rather than inventing a concern.
+- headline: one sentence, at most 12 words, leading with whatever is most at risk once priority and
+  deadline are weighed together. State the fact, not your reasoning for picking it: "The board deck
+  is urgent and due Friday", never "Rebuild the board deck to address its urgent priority status".
+  If nothing is at risk, say that plainly rather than inventing a concern.
 - summary: two to four sentences on what the day looks like and what the rest of the week holds.
-  Name specific tasks. Mention counts only where a count is the useful fact.
-- focus: up to three lines, each naming one specific task worth acting on today, hardest or most
-  overdue first. Fewer is fine. Empty if there is genuinely nothing to act on.
+  Name specific tasks, and name their priority where that is the reason they matter. Mention counts
+  only where a count is the useful fact.
+- focus: up to three lines, each naming one specific task worth acting on today, in the order given
+  by "What to act on first". Fewer is fine. Empty if there is genuinely nothing to act on.
 
 Rules:
-- Only ever describe tasks from the list you are given. Never invent a task, a deadline, a person,
-  or a concern that the data does not support.
+- Only ever describe tasks from the list you are given. Never invent a task, a deadline, a priority,
+  a person, or a concern that the data does not support.
 - Plain sentences. No greetings, no sign-offs, no motivational filler, no emoji.
 - Do not use em dashes."""
 
+    ordered = ""
+    if ranked:
+        ordered = "What to act on first (priority and deadline weighed together):\n" + "\n".join(
+            f"{i}. {_task_line(t)[2:]}" for i, t in enumerate(ranked, start=1)
+        )
+
     prompt = "\n\n".join(
-        [
+        block
+        for block in [
             _section("Overdue", overdue),
             _section("Due today", due_today),
             _section("Due later this week", due_this_week),
             _section("Open, no due date", no_due_date),
+            ordered,
         ]
+        if block
     )
 
     digest = _call_gemini(prompt, instructions, _DIGEST_SCHEMA)

@@ -29,6 +29,9 @@ SECTION_LABELS = [
     ("no_due_date", "No due date"),
 ]
 
+# Matches the task_priority enum in supabase/schema.sql, lowest number first.
+PRIORITY_RANK = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+
 
 def bucket_tasks(tasks: list[dict]) -> dict[str, list[dict]]:
     """Splits one person's tasks into the four sections the digest is built from.
@@ -59,12 +62,56 @@ def bucket_tasks(tasks: list[dict]) -> dict[str, list[dict]]:
             buckets["due_this_week"].append(t)
 
     # Within a section, the most urgent thing first, then the oldest deadline.
-    priority_rank = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
     for key in buckets:
         buckets[key].sort(
-            key=lambda t: (priority_rank.get(t["priority"], 9), t.get("due_date") or "9999-12-31")
+            key=lambda t: (PRIORITY_RANK.get(t["priority"], 9), t.get("due_date") or "9999-12-31")
         )
     return buckets
+
+
+def _timing_weight(task: dict, today: date) -> int:
+    if not task.get("due_date"):
+        return 3
+    days = (date.fromisoformat(task["due_date"]) - today).days
+    if days < 0:
+        return -1  # overdue
+    if days == 0:
+        return 0
+    if days <= 2:
+        return 1
+    return 2  # later this week
+
+
+def rank_tasks(buckets: dict[str, list[dict]], limit: int = 10) -> list[dict]:
+    """One flat list across all four sections, ordered by what to do first.
+
+    The sections alone can't answer this, because they rank purely by date: an
+    urgent task due Friday lands in the third of them, below every low-priority
+    thing that happened to slip. Deadline and priority are both real signals and
+    neither one wins outright, so they are scored together:
+
+        score = priority rank * 2 + timing weight
+
+    priority rank runs urgent 0 -> low 3, timing weight runs overdue -1, today 0,
+    next two days 1, later this week 2, undated 3. Doubling the priority term is
+    what makes it the stronger of the two without letting it override the other:
+    an urgent task due Friday (2) outranks a medium (3) or low (5) task that is
+    already overdue, but still sits behind anything urgent or high that is
+    overdue (-1 and 1). Ties break on the earlier deadline.
+
+    Computed here rather than left to the model. A scoring rule that lives in one
+    readable function can be argued with and changed; the same judgement buried
+    in a prompt is neither inspectable nor stable between runs.
+    """
+    today = date.today()
+    everything = [t for key, _ in SECTION_LABELS for t in buckets[key]]
+    everything.sort(
+        key=lambda t: (
+            PRIORITY_RANK.get(t["priority"], 9) * 2 + _timing_weight(t, today),
+            t.get("due_date") or "9999-12-31",
+        )
+    )
+    return everything[:limit]
 
 
 def fingerprint(buckets: dict[str, list[dict]]) -> str:
@@ -128,6 +175,7 @@ def generate(user_id: str, full_name: str, buckets: dict[str, list[dict]]) -> di
         due_today=buckets["due_today"],
         due_this_week=buckets["due_this_week"],
         no_due_date=buckets["no_due_date"],
+        ranked=rank_tasks(buckets),
     )
     return _store(user_id, date.today(), digest, fingerprint(buckets))
 
@@ -150,6 +198,7 @@ def empty_digest(buckets: dict[str, list[dict]]) -> dict | None:
 
 
 __all__ = [
+    "PRIORITY_RANK",
     "SECTION_LABELS",
     "GeminiError",
     "bucket_tasks",
@@ -157,4 +206,5 @@ __all__ = [
     "fingerprint",
     "generate",
     "load_cached",
+    "rank_tasks",
 ]
