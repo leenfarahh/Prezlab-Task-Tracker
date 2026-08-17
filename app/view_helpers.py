@@ -121,8 +121,30 @@ def format_timestamp(iso_ts: str) -> str:
     return f"{local.strftime('%b')} {local.day}{suffix}"
 
 
+# Word boundaries in a name nobody typed. A profile is created at first login
+# from the local part of the address (see app/routers/auth_router.py), so
+# "leen.farah@prezlab.com" arrives as "leen.farah" - one whitespace-delimited
+# word, which the single-name fallback below read as "LE" rather than "LF".
+_NAME_SEPARATORS = str.maketrans({".": " ", "_": " ", "-": " "})
+
+
 def initials(full_name: str) -> str:
-    parts = full_name.split()
+    """First letter of the first name and of the last, e.g. "LF" for "Leen Farah".
+
+    Dots, underscores and hyphens separate words alongside whitespace, so a name
+    derived from an email address reads the same as one someone typed: "leen.farah"
+    and "Leen Farah" both give "LF". A hyphenated first name therefore contributes
+    only its own first letter - "Anne-Marie Dupont" is "AD", which is what the
+    whitespace-only version already did.
+
+    A whole address has its domain dropped first, or the last initial would come
+    from the TLD ("leen.farah@prezlab.com" -> "FC"). Profiles shouldn't hold one,
+    but imported rows do.
+
+    A single name with nothing to split on keeps the two-letter fallback ("Sanad"
+    -> "SA"): one letter in an avatar reads as a placeholder rather than a person.
+    """
+    parts = (full_name or "").split("@")[0].translate(_NAME_SEPARATORS).split()
     if not parts:
         return "?"
     if len(parts) == 1:

@@ -350,9 +350,11 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 .task-card:hover { border-color: rgba(0,37,40,0.35); box-shadow: 0 4px 12px rgba(0,37,40,0.08); transform: translateY(-1px); }
 .task-card.flagged { border-color: rgba(185,121,31,0.6); }
 
-/* Drag a card into another status column as a shortcut for opening it and
-   changing the Status field. Only the status-grouped board sets draggable, so
-   the grab cursor is also the affordance telling you where it works. */
+/* Drag a card into another group as a shortcut for opening it and changing the
+   field by hand - the status on a board, team or profile column, the person on a
+   by-user column, the deadline on a my-day section. The archived board sets
+   draggable nowhere, so the grab cursor is also the affordance telling you where
+   it works. */
 .task-card[draggable="true"] { cursor: grab; }
 .task-card.is-dragging { opacity: 0.4; cursor: grabbing; }
 .task-card.is-dragging:hover { transform: none; box-shadow: 0 1px 2px rgba(0,37,40,0.04); }
@@ -780,3 +782,18 @@ a.modal-menu-item { text-decoration: none; }
 /* Wraps into as many columns as fit rather than the board's fixed six: a section
    here holds anything from one card to a dozen. */
 .my-day-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+
+/* A section is the drop target for rescheduling here, since these groups are
+   deadlines rather than statuses. Outlined rather than inset-shadowed like a
+   board column: sections have no padding of their own, so a shadow would sit on
+   top of the cards instead of around them, and an outline costs no layout. */
+.my-day-section.drop-over { background: var(--hover-tint); outline: 2px solid rgba(0,37,40,0.35); outline-offset: 6px; border-radius: 4px; }
+/* Empty sections are rendered but hidden - four headings at zero reads as more
+   structure than there is - and revealed while a drag is in progress, because a
+   bucket you can't see is a bucket you can't drag into. Only the ones you can
+   drop into: "Overdue" carries no data-drop-due (see digest.bucket_due_dates), so
+   showing it would offer a target that refuses. The min-height is what gives a
+   revealed section a band to aim at, since an empty card grid has no height. */
+.my-day-section.is-empty { display: none; }
+body.dragging .my-day-section.is-empty[data-drop-due] { display: block; }
+body.dragging .my-day-cards { min-height: 56px; }

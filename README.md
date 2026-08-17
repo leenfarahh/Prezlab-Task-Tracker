@@ -101,13 +101,39 @@ Generated **once a day, on your first visit**, and cached in `daily_digests` (`s
 
 Two things keep it honest. The page never blocks on the model: task lists render immediately, and only when nothing is cached does the panel fetch itself (`hx-trigger="load"`, once — deliberately **not** on any of the app's pollers, which would bill an LLM call every few seconds). And each digest stores a fingerprint of the tasks it was written from, so if work is added, reassigned or rescheduled afterwards the panel says *"Your tasks have changed since this was written"* rather than quietly serving a stale read. **Refresh** regenerates over the top of it. A person with nothing open gets a fixed sentence and no API call at all.
 
-## Moving a task between statuses
+## Moving a task by dragging it
 
-Two ways, both kept: open the card and change the Status field, or drag the card into another column. The drag posts to `POST /tasks/{id}/status` (status only, not the whole task) and comes back as the same board+sidebar out-of-band refresh every other write uses. Same permission rule as the modal — creator or assignee only — so a refused drag returns the permission modal and the card snaps back.
+Two ways to move anything, both kept: open the card and change the field, or drag the card. **What a drop does depends on what the group it lands in means**, which is different on each page:
+
+| Page | A group is | Dropping a card there |
+|---|---|---|
+| Board — project, workstream, or All workstreams | a status | moves it to that status |
+| Board → **By user** | a person | reassigns it |
+| **Team** | a status *and* a person | moves it **and** reassigns it, in one write |
+| **Profile** (`/users/{id}`) | a status | moves it to that status |
+| **My day** | a deadline | reschedules it |
+| Archived tasks | — | nothing; it's a history view, cards stay click-to-edit |
+
+The drag posts to `POST /tasks/{id}/move`, which takes only the fields the drop actually changes — deliberately not the whole task off the edit form, which would be a bigger payload and a way to clobber a field a teammate changed between the page render and the drop. Same permission rule as the modal — creator or assignee only — so a refused drag returns the permission modal and the card goes back where it came from. A drop that changes nothing (back into its own column, or into a column it already satisfies) writes no row and logs no feed line; the client skips it and the server narrows to the real diff regardless.
+
+One drop being two changes is why this is one route rather than three: dragging a card into another teammate's **Blocked** on the team page is a status move and a reassignment, and it goes out as one round trip with one feed line each.
 
 Every status column is ordered by due date, soonest first, with undated tasks at the bottom (`due_date_sort_key` in `app/view_helpers.py`, applied by `group_by_status` — so the board, the team page, and profile pages all read the same way). A dropped card is placed into that order client-side too, rather than at the end of the column, so it doesn't visibly jump when the refresh lands.
 
-Dragging is enabled only on the status-grouped board. The "by user" columns are people rather than statuses, and the archived board is a history view, so cards in both stay click-to-edit. Client side lives in `app/static/dnd.js`.
+**What a drop writes is declared by the markup, not decided in JS.** A drop target carries `data-drop-status`, `data-drop-assignee` and/or `data-drop-due`, and `app/static/dnd.js` reads whichever are present — which is also the on/off switch, since the archived board renders the same status grid with none of them. An empty value is meaningful: `data-drop-assignee=""` (the Unassigned column) unassigns, `data-drop-due=""` (the No due date section) clears the deadline. The enclosing `data-dnd-scope` says which page it is, because these five views don't share a refresh fragment and three of them can't be told apart from a board server-side — `partials/team.html` and `partials/user_detail.html` both use `id="board-container"`, so an unconditional board refresh would swap a board into the middle of the team page. See `app/fragments.py`.
+
+### My day, where the groups are deadlines
+
+`digest.bucket_due_dates` picks the date each section writes, next to the bucketing it has to agree with: **Today** → today, **Rest of this week** → the far end of that window (so a card dropped there stays there rather than landing in the section above), **No due date** → cleared. **Overdue is not a drop target** — every date before today qualifies and a drop would have to invent a deadline.
+
+Empty sections are rendered but hidden, and the droppable ones are revealed for the length of a drag: four headings at zero reads as more structure than there is, but a bucket you can't see is a bucket you can't drag into.
+
+### Limits worth knowing
+
+- **Reassigning on the By user board only reaches people who already hold work in that workstream**, since that's what `group_by_assignee` builds columns from. Use the team page, which lists everyone, to hand a task to someone with nothing there yet.
+- **Most cards on the team page aren't yours to move.** It shows everyone's work, and the permission rule is unchanged — creator or assignee — so dragging a teammate's task you didn't create returns the permission modal. Cards are marked draggable regardless, the same as on the board; making the affordance match the rule would be a change to every page, not just this one.
+- **Rescheduling on My day doesn't re-flag the digest.** The panel's "your tasks have changed since this was written" notice is computed when the page renders, and a drop refreshes only the sections below it — deliberately, since rebuilding the panel costs a Gemini call. It reappears on the next full load.
+- **A drop that fails is undone client-side rather than re-fetched.** That's exactly right for a refusal, which is the common case. For the rarer case of a write that landed but whose response didn't, the board (5s) and team (10s) polls correct it within seconds; the profile and My day pages don't poll, so those stay stale until reloaded.
 
 ## Comments
 
@@ -221,8 +247,9 @@ What's left, and why:
 ### Data and behaviour
 
 - **Board updates via polling, not push.** The board and sidebar refresh every 5-6 seconds, the team panel every 10. There's a few seconds of lag between someone else moving a task and it showing up for you — not instant like the JS version's websocket-based Realtime. Fine for a small team's daily use; worth revisiting if that lag becomes a real complaint.
-- **Drag and drop is pointer-only.** It's built on the HTML5 drag events, so there's no keyboard equivalent and it does nothing useful on touch. That's why the Status field stays in the edit modal — it, not the drag, is the accessible path, and removing it would make the board unusable without a mouse.
-- **A dropped card moves before the server confirms it.** The card is repositioned immediately and corrected from the response, so for the length of one round trip the board shows the move as done. A refusal or a network error pulls a fresh board straight away, but a drop that fails will visibly undo itself rather than never appearing to happen.
+- **Drag and drop is pointer-only.** It's built on the HTML5 drag events, so there's no keyboard equivalent and it does nothing useful on touch. That's why the Status, Assignee and Due date fields stay in the edit modal — they, not the drag, are the accessible path, and removing them would make the app unusable without a mouse. This now covers reassigning and rescheduling as well as status, so the gap is wider than it was.
+- **A dropped card moves before the server confirms it.** The card is repositioned immediately and corrected from the response, so for the length of one round trip the page shows the move as done. A drop that fails visibly undoes itself rather than never appearing to happen. On My day the card's *date label* lags a beat longer than its position, since rewriting it client-side would mean a second copy of `format_due_date` in JS.
+- **Reassigning by drag on the team page needs both people expanded.** Dragging over a collapsed teammate opens their board, which makes it workable, but the two grids still have to be on screen together — on a long team list that's a scroll, not a drag.
 - **Unarchiving a workstream is not an exact undo.** Archiving a workstream archives its projects and tasks as one unit, and unarchiving reverses that across *all* of them. Anything that was archived individually *before* the workstream was archived comes back out too. Rare, but surprising when it happens.
 - **`docs/llm-feature-proposal.md` doesn't match what was built.** It argues for the JS version's Workstream Pulse: a digest of a *whole workstream*, shown to the team, stored in a `pulse_digests` table. What exists here is "New task from text" plus "My day" — a digest of *one person's own tasks*, visible only to them, in `daily_digests`. The writing constraints it proposes (lead with risk, invent no concern, plain sentences, a word cap) are the ones My day's prompt actually uses. Read it as background on the decision, not as a description of the app.
 - **No comments/notifications** — same scope cut as the JS version, contained follow-ups rather than schema changes.

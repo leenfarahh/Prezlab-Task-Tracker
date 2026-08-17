@@ -70,6 +70,32 @@ def bucket_tasks(tasks: list[dict]) -> dict[str, list[dict]]:
     return buckets
 
 
+def bucket_due_dates() -> dict[str, str | None]:
+    """The due date a drop into each section writes, keyed the same as bucket_tasks.
+
+    My day's sections are deadlines rather than statuses, so dragging a card
+    between them reschedules it - and that needs one concrete date per section
+    where two of the four are ranges rather than days. "Rest of this week"
+    resolves to the far end of the window bucket_tasks splits on, so a card
+    dropped there lands inside the section it was dropped into rather than one
+    above it. "No due date" clears the field.
+
+    Overdue is None, meaning not a drop target at all: every date before today
+    qualifies and there is no reason to prefer one, so a drop would have to invent
+    a deadline. Nothing else in the app can express "make this late" either.
+
+    Derived from the same today/week_end pair bucket_tasks uses, so the two can't
+    disagree about which section a written date belongs to.
+    """
+    today = date.today()
+    return {
+        "overdue": None,
+        "due_today": today.isoformat(),
+        "due_this_week": (today + timedelta(days=6)).isoformat(),
+        "no_due_date": "",
+    }
+
+
 def _timing_weight(task: dict, today: date) -> int:
     if not task.get("due_date"):
         return 3
@@ -212,6 +238,7 @@ __all__ = [
     "PRIORITY_RANK",
     "SECTION_LABELS",
     "GeminiError",
+    "bucket_due_dates",
     "bucket_tasks",
     "empty_digest",
     "fingerprint",

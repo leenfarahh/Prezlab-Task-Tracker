@@ -1,9 +1,14 @@
-{# draggable is only set on the status-grouped board, where a column IS a status
-   and a drop has an unambiguous meaning. The by-user columns are assignees and
-   the archived board is read-only, so cards there stay click-to-edit only. #}
+{# draggable is set wherever the group a card sits in makes a drop unambiguous:
+   the status-grouped board, the by-user columns (a column is a person, so a drop
+   reassigns), and my day's deadline sections (a drop reschedules). The archived
+   board is a history view, so cards there stay click-to-edit only.
+
+   The three data-* values are what dnd.js compares against the drop target to
+   tell a real move from a drop that changes nothing - see changedFields there.
+   They are only emitted when draggable, since nothing else reads them. #}
 {% macro task_card(task, assignee, priority_label, priority_color, active_workstream, active_project, flagged=False, draggable=False) -%}
 <button class="task-card status-{{ task.status }} {{ 'flagged' if flagged else '' }}"
-        {% if draggable %}draggable="true" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-due="{{ task.due_date or '' }}"{% endif %}
+        {% if draggable %}draggable="true" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-assignee="{{ task.assignee_id or '' }}" data-due="{{ task.due_date or '' }}"{% endif %}
         hx-get="/partials/task-detail-modal?task_id={{ task.id }}&workstream={{ active_workstream }}&project={{ active_project }}" hx-target="#modal-root" hx-swap="innerHTML">
   {% if active_project in ("all", "archived", "by_user") and task.project_name %}
   <p class="project-tag">{{ task.project_name }}</p>

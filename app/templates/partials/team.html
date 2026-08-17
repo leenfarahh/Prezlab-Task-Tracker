@@ -1,4 +1,8 @@
-<section class="board-section" id="board-container">
+{# data-dnd-scope tells a drop which page it happened on, so the refresh it
+   triggers re-renders the team list rather than a board - this section shares
+   #board-container with partials/board.html, and without the marker the oob
+   refresh would swap a board in here. #}
+<section class="board-section" id="board-container" data-dnd-scope="team">
   <div class="board-header">
     <h1>Team</h1>
   </div>

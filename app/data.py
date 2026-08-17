@@ -621,10 +621,15 @@ def build_my_day_context(user_id: str) -> dict:
         t["workstream_id"] = project["workstream_id"] if project else None
 
     buckets = digest.bucket_tasks(tasks)
+    # drop_due is what a card dragged into that section is rescheduled to, or None
+    # where the section isn't a drop target - see digest.bucket_due_dates. It
+    # rides on the section rather than being looked up in the template so the
+    # rule stays next to the bucketing it has to agree with.
+    drop_due = digest.bucket_due_dates()
     return {
         "buckets": buckets,
         "sections": [
-            {"key": key, "label": label, "tasks": buckets[key]}
+            {"key": key, "label": label, "tasks": buckets[key], "drop_due": drop_due[key]}
             for key, label in digest.SECTION_LABELS
         ],
         "open_count": sum(len(v) for v in buckets.values()),

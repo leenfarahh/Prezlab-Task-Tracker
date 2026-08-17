@@ -1,8 +1,10 @@
+from datetime import date
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app import activity_log
+from app import activity_log, fragments
 from app.auth import current_user, require_login
 from app.data import fetch_profiles, fetch_task, fetch_task_comments, prefetch
 from app.fragments import refreshed_fragments
@@ -11,6 +13,20 @@ from app.view_helpers import STATUS_ORDER
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _refusal(request: Request, message: str) -> HTMLResponse:
+    """The modal every declined write comes back as.
+
+    A drag reads this response as "it didn't happen" by the fact that anything
+    landed in #modal-root at all, and puts the card back - see postMove in
+    app/static/dnd.js.
+    """
+    return HTMLResponse(
+        templates.get_template("partials/permission_denied_modal.html").render(
+            {"request": request, "message": message}
+        )
+    )
 
 
 def _guard(request: Request, task_id: str) -> HTMLResponse | None:
@@ -44,11 +60,7 @@ def _task_owner_denial(request: Request, task_id: str) -> HTMLResponse | None:
     if user["id"] in (task["created_by"], task["assignee_id"]):
         return None
 
-    return HTMLResponse(
-        templates.get_template("partials/permission_denied_modal.html").render(
-            {"request": request, "message": "Only this task's creator or assignee can do that."}
-        )
-    )
+    return _refusal(request, "Only this task's creator or assignee can do that.")
 
 
 def _archived_parent_denial(request: Request, task_id: str) -> HTMLResponse | None:
@@ -95,11 +107,7 @@ def _archived_parent_denial(request: Request, task_id: str) -> HTMLResponse | No
     else:
         return None
 
-    return HTMLResponse(
-        templates.get_template("partials/permission_denied_modal.html").render(
-            {"request": request, "message": message}
-        )
-    )
+    return _refusal(request, message)
 
 
 @router.post("/tasks", response_class=HTMLResponse)
@@ -177,46 +185,107 @@ def update_task(
     return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
 
 
-@router.post("/tasks/{task_id}/status", response_class=HTMLResponse)
-def set_task_status(
+@router.post("/tasks/{task_id}/move", response_class=HTMLResponse)
+def move_task(
     request: Request,
     task_id: str,
-    status: str = Form(...),
+    fields: str = Form(""),
+    status: str = Form(""),
+    assignee_id: str = Form(""),
+    due_date: str = Form(""),
+    scope: str = Form("board"),
+    scope_user: str = Form(""),
     active_workstream: str = Form("all"),
     active_project: str = Form("all"),
 ):
-    """Status-only update, posted by a drag between board columns.
+    """Whatever a drag-and-drop landed on, posted by app/static/dnd.js.
+
+    One route rather than three because a single drop can be more than one change:
+    a column on the team page is both a status and a person, so dropping a card
+    into someone else's "Blocked" reassigns it and moves it in one write, one
+    round trip, and one pair of feed lines.
 
     Deliberately separate from update_task rather than a lighter call into it:
     that one takes the whole task off the edit form and would need every other
     field echoed back just to move a card, which is both a bigger payload and a
     way to clobber a field a teammate changed between the page render and the
     drop. Same permission guard, same oob refresh.
+
+    `fields` names which of status/assignee_id/due_date this drop writes, and is
+    not redundant with their values: "" is a meaningful value for two of them
+    (unassign, clear the deadline) and is indistinguishable from a field that was
+    never sent. Naming them separately means an unmentioned field is left alone
+    no matter what the form body happens to carry.
+
+    scope/scope_user say which page the drag happened on, so the refresh
+    re-renders that page rather than a board - see app/fragments.py.
     """
     denial = _guard(request, task_id)
     if denial:
         return denial
-
-    # Nothing else validates status - the edit form is a <select> built from
-    # STATUS_ORDER - but this one arrives as a bare form field from client-side
-    # JS, so a stale or hand-rolled value would otherwise reach the column
-    # check constraint as a 500.
-    if status not in STATUS_ORDER:
-        return HTMLResponse(
-            templates.get_template("partials/permission_denied_modal.html").render(
-                {"request": request, "message": f"Unknown status: {status}."}
-            )
-        )
-
     user = current_user(request)
-    before = dict(fetch_task(task_id))  # memoized by _guard, as in update_task
-    get_service_client().table("tasks").update({"status": status}).eq("id", task_id).execute()
 
-    after = {**before, "status": status}
-    for kind, detail in activity_log.diff_task_events(before, after):
-        activity_log.log_task_event(kind, after, user["id"], detail=detail)
+    # Checked rather than trusted, even though both values are server-rendered
+    # attributes read straight back off the page (dnd.js reads them from
+    # [data-dnd-scope]). An unrecognised scope would fall through to the board
+    # branch of refreshed_fragments, and a board is what the team and profile
+    # pages would then get swapped into the middle of.
+    if scope not in fragments.SCOPES:
+        return _refusal(request, f"Unknown page scope: {scope}.")
+    if scope == fragments.USER and scope_user not in fetch_profiles():
+        return _refusal(request, "That profile no longer exists.")
 
-    return HTMLResponse(refreshed_fragments(request, active_workstream, active_project))
+    wanted = {f for f in fields.split(",") if f}
+    changes: dict = {}
+
+    if "status" in wanted:
+        # Nothing else validates status - the edit form is a <select> built from
+        # STATUS_ORDER - but this arrives as a bare form field from client-side
+        # JS, so a stale or hand-rolled value would otherwise reach the column
+        # check constraint as a 500.
+        if status not in STATUS_ORDER:
+            return _refusal(request, f"Unknown status: {status}.")
+        changes["status"] = status
+
+    if "assignee_id" in wanted:
+        # Same reasoning, against the live profile list: the by-user and team
+        # columns are rendered from it, so an id that no longer resolves means the
+        # page was stale, not that the person should be written to the foreign key.
+        if assignee_id and assignee_id not in fetch_profiles():
+            return _refusal(request, "That person is no longer on the team.")
+        changes["assignee_id"] = assignee_id or None
+
+    if "due_date" in wanted:
+        if due_date:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError:
+                return _refusal(request, f"Not a date: {due_date}.")
+        changes["due_date"] = due_date or None
+
+    # Read before writing. _guard already fetched and memoized this row, so it
+    # costs nothing here, and it is the only chance to see what the fields were.
+    before = dict(fetch_task(task_id))
+    # Narrowed to what actually differs, so a drop the client thought was a move
+    # and the server can see wasn't writes no row and logs no feed line. The
+    # client already skips a no-op drop; this is what makes that true rather than
+    # merely usual.
+    changes = {field: value for field, value in changes.items() if before.get(field) != value}
+
+    if changes:
+        get_service_client().table("tasks").update(changes).eq("id", task_id).execute()
+        after = {**before, **changes}
+        # One drop can be a reassignment and a status move at once; each gets its
+        # own feed line. The audience spans both assignees so the person who just
+        # lost the task and the person who just got it both see it - same as
+        # update_task, and the reason this can't reuse log_task_event's default.
+        audience = activity_log.audience_for(before, after, actor_id=user["id"])
+        for kind, detail in activity_log.diff_task_events(before, after):
+            activity_log.log_task_event(kind, after, user["id"], detail=detail, audience=audience)
+
+    return HTMLResponse(
+        refreshed_fragments(request, active_workstream, active_project, scope=scope, scope_user=scope_user)
+    )
 
 
 def _comments_fragment(request: Request, task_id: str) -> HTMLResponse:

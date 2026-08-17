@@ -1,4 +1,8 @@
-<div class="team-list">
+{# id + oob so a drag can refresh this list in place. The 10s poll on #team-body
+   in team.html renders the same template WITHOUT oob and swaps "morph:innerHTML",
+   which reaches the same markup - the id is just what an out-of-band swap needs
+   to find it. #}
+<div class="team-list" id="team-list" {% if oob %}hx-swap-oob="morph"{% endif %}>
   {% for person in people %}
   <details class="team-details" data-key="team:{{ person.id }}">
     <summary class="team-summary">
@@ -34,15 +38,23 @@
         </div>
       </div>
 
+      {# A column here is a status AND a person, and carries both, so one drop can
+         do both: dragging a card into another teammate's "Blocked" reassigns it
+         and moves it in a single write. Dropping inside the person's own grid
+         leaves the assignee alone, since dnd.js only sends the fields that would
+         actually change. Cards on this page stay links to their project board -
+         the drag is additive, and a click still navigates. #}
       <div class="board-grid">
         {% for status in status_order %}
-        <div class="board-column">
+        <div class="board-column" data-drop-status="{{ status }}" data-drop-assignee="{{ person.id }}">
           <p class="column-header">
             <span>{{ status_label[status] }}</span>
             <span class="column-count">{{ person.grouped[status] | length }}</span>
           </p>
           {% for task in person.grouped[status] %}
-          <a href="/?workstream={{ task.workstream_id }}&project={{ task.project_id }}" class="task-card status-{{ task.status }}">
+          <a href="/?workstream={{ task.workstream_id }}&project={{ task.project_id }}" class="task-card status-{{ task.status }}"
+             draggable="true" data-task-id="{{ task.id }}" data-status="{{ task.status }}"
+             data-assignee="{{ task.assignee_id or '' }}" data-due="{{ task.due_date or '' }}">
             <p class="project-tag">{{ task.workstream_name }} · {{ task.project_name }}</p>
             <p class="task-card-title">{{ task.title }}</p>
             {% if task.due_date_display %}

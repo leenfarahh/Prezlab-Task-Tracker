@@ -11,7 +11,9 @@
 <section class="board-section" id="board-container"
          {% if oob %}hx-swap-oob="morph"{% endif %}
          {# The scope a drop has to post back, so the oob refresh it triggers
-            re-renders the board the user is actually looking at. #}
+            re-renders the board the user is actually looking at - and not, say,
+            the team page, which uses this same id for its own section. #}
+         data-dnd-scope="board"
          data-workstream="{{ active_workstream }}" data-project="{{ active_project }}"
          hx-get="/partials/board?workstream={{ active_workstream }}&project={{ active_project }}" hx-trigger="every 5s" hx-swap="morph">
   {# Tab strips only, since the create buttons moved up to the utility strip in
@@ -104,14 +106,19 @@
 
   {% if active_project == "by_user" and scoped_workstream %}
   <div class="board-grid" style="grid-template-columns: repeat({{ by_user_columns | length if by_user_columns else 1 }}, 1fr);">
+    {# A column here is a person, so a drop reassigns rather than restatuses -
+       data-drop-assignee="" on the Unassigned column, which unassigns. Reachable
+       people are only the ones already holding work in this workstream, since
+       that is what group_by_assignee builds columns from; use the team page to
+       hand a task to someone with nothing here yet. #}
     {% for col in by_user_columns %}
-    <div class="board-column">
+    <div class="board-column" data-drop-assignee="{{ col.assignee.id if col.assignee else '' }}">
       <p class="column-header">
         <span>{{ col.assignee.full_name if col.assignee else "Unassigned" }}</span>
         <span class="column-count">{{ col.tasks | length }}</span>
       </p>
       {% for task in col.tasks %}
-        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids) }}
+        {{ tc.task_card(task, profiles.get(task.assignee_id), priority_label[task.priority], priority_color[task.priority], active_workstream, active_project, task.id in flagged_ids, True) }}
       {% endfor %}
     </div>
     {% else %}
@@ -121,13 +128,13 @@
     {% endfor %}
   </div>
   {% else %}
-  {# data-status is what dnd.js reads to turn a column into a drop target, so it
-     doubles as the on/off switch: the archived board renders the same status
+  {# data-drop-status is what dnd.js reads to turn a column into a drop target, so
+     it doubles as the on/off switch: the archived board renders the same status
      grid but is a history view, not somewhere to reshuffle work. #}
   {% set droppable = active_workstream != "archived" %}
   <div class="board-grid">
     {% for status in status_order %}
-    <div class="board-column" {% if droppable %}data-status="{{ status }}"{% endif %}>
+    <div class="board-column" {% if droppable %}data-drop-status="{{ status }}"{% endif %}>
       <p class="column-header">
         <span>{{ status_label[status] }}</span>
         <span class="column-count">{{ grouped[status] | length }}</span>

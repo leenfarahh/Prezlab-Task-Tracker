@@ -1,4 +1,12 @@
-<section class="board-section" id="board-container">
+{# oob is set only by the refresh a drag triggers (app/fragments.py). The two POST
+   routes that also render this template target #board-container directly with
+   hx-swap="outerHTML", so they leave it unset and swap normally.
+
+   No data-drop-assignee on the columns below: every task here already belongs to
+   this one person, so there is nobody a drop could hand it to. #}
+<section class="board-section" id="board-container"
+         {% if oob %}hx-swap-oob="morph"{% endif %}
+         data-dnd-scope="user" data-dnd-user="{{ person.id }}">
   <div class="board-header">
     <h1>{{ person.full_name }}</h1>
   </div>
@@ -65,13 +73,15 @@
 
   <div class="board-grid">
     {% for status in status_order %}
-    <div class="board-column">
+    <div class="board-column" data-drop-status="{{ status }}">
       <p class="column-header">
         <span>{{ status_label[status] }}</span>
         <span class="column-count">{{ grouped[status] | length }}</span>
       </p>
       {% for task in grouped[status] %}
-      <a href="/?workstream={{ task.workstream_id }}&project={{ task.project_id }}" class="task-card status-{{ task.status }}">
+      <a href="/?workstream={{ task.workstream_id }}&project={{ task.project_id }}" class="task-card status-{{ task.status }}"
+         draggable="true" data-task-id="{{ task.id }}" data-status="{{ task.status }}"
+         data-assignee="{{ task.assignee_id or '' }}" data-due="{{ task.due_date or '' }}">
         <p class="project-tag">{{ task.workstream_name }} · {{ task.project_name }}</p>
         <p class="task-card-title">{{ task.title }}</p>
         {% if task.due_date_display %}
