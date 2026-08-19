@@ -89,7 +89,7 @@ Nothing is written to the database directly from the model. Every run lands on a
 
 ## My day
 
-`/my-day` — top of the sidebar, above Team, and also the first item in the account menu behind your avatar. Your own open tasks grouped by **when they're due** rather than by status (Overdue, Today, Rest of this week, No due date), with a short written read on them at the top: a headline leading with whatever is most at risk, two to four sentences on the shape of the day and week, and up to three tasks worth acting on first.
+`/my-day` — top of the sidebar, above Team, and also the first item in the account menu behind your avatar. Your own open tasks grouped by **when they're due** rather than by status (Overdue, Today, Rest of this week, No due date), with a short written read on them at the top: a headline leading with whatever is most pressing, two to four sentences on the shape of the day and week, and up to three tasks worth acting on first.
 
 Grouped by deadline on purpose. The board already answers "what state is everything in"; it can't answer "what do I do today", because an in-progress task due Friday and an in-progress task that was due last week sit in the same column. Done tasks and anything due beyond this week are left out entirely — neither is work for today.
 

@@ -30,7 +30,7 @@ _DIGEST_SCHEMA = {
     "properties": {
         "headline": {
             "type": "STRING",
-            "description": "One sentence, at most 12 words, leading with whatever is most at risk.",
+            "description": "One sentence, at most 12 words, leading with whatever is most pressing.",
         },
         "summary": {
             "type": "STRING",
@@ -192,10 +192,10 @@ act on first" list below already weighs the two together; work from that order r
 re-deriving it, and say what makes something pressing when it is the priority rather than the date.
 
 Return:
-- headline: one sentence, at most 12 words, leading with whatever is most at risk once priority and
+- headline: one sentence, at most 12 words, leading with whatever is most pressing once priority and
   deadline are weighed together. State the fact, not your reasoning for picking it: "The board deck
   is urgent and due Friday", never "Rebuild the board deck to address its urgent priority status".
-  If nothing is at risk, say that plainly rather than inventing a concern.
+  If nothing is pressing, say that plainly rather than inventing a concern.
 - summary: two to four sentences on what the day looks like and what the rest of the week holds.
   Name specific tasks, and name their priority where that is the reason they matter. Mention counts
   only where a count is the useful fact.

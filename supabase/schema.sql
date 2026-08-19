@@ -15,10 +15,27 @@ create extension if not exists "pgcrypto";
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'task_status') then
-    create type task_status as enum ('backlog', 'in_progress', 'at_risk', 'blocked', 'in_review', 'done');
+    create type task_status as enum ('backlog', 'in_progress', 'pending', 'blocked', 'in_review', 'done');
   end if;
   if not exists (select 1 from pg_type where typname = 'task_priority') then
     create type task_priority as enum ('low', 'medium', 'high', 'urgent');
+  end if;
+end $$;
+
+-- The status formerly labelled 'at_risk' is now 'pending'. Renaming the enum
+-- label rather than adding a new one and migrating rows: the label is the value,
+-- so every task, index entry and default follows it with no row rewritten and no
+-- window in which both spellings are valid. Guarded on the old label still being
+-- present, so this is a no-op on a fresh project and safe to re-run.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'task_status' and e.enumlabel = 'at_risk'
+  ) then
+    alter type task_status rename value 'at_risk' to 'pending';
   end if;
 end $$;
 
@@ -272,6 +289,20 @@ alter table public.task_activity
 -- edit from an archive from a delete.
 drop trigger if exists tasks_log_change on public.tasks;
 drop function if exists public.log_task_change();
+
+-- Status changes keep the status as plain text inside detail, so the enum rename
+-- above ('at_risk' -> 'pending') does not reach them. Without this, every
+-- historical "moved to At risk" event would render the raw value it no longer has
+-- a label for. The event itself is unchanged - the status it names is the same
+-- status, under the name it now has everywhere else. Idempotent: after this runs
+-- there is nothing left matching the old value.
+update public.task_activity
+set detail = detail || jsonb_build_object('from', 'pending')
+where detail->>'from' = 'at_risk';
+
+update public.task_activity
+set detail = detail || jsonb_build_object('to', 'pending')
+where detail->>'to' = 'at_risk';
 
 -- ---------- Comments ----------
 -- Discussion on a task, open to the whole team. Deliberately NOT restricted to

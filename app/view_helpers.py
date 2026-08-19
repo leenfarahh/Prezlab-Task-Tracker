@@ -1,11 +1,11 @@
 from datetime import date, datetime, timedelta, timezone
 
-STATUS_ORDER = ["backlog", "in_progress", "at_risk", "blocked", "in_review", "done"]
+STATUS_ORDER = ["backlog", "in_progress", "pending", "blocked", "in_review", "done"]
 
 STATUS_LABEL = {
     "backlog": "Backlog",
     "in_progress": "In progress",
-    "at_risk": "At risk",
+    "pending": "Pending",
     "blocked": "Blocked",
     "in_review": "In review",
     "done": "Done",
@@ -14,7 +14,7 @@ STATUS_LABEL = {
 STATUS_COLOR = {
     "backlog": "var(--done)",
     "in_progress": "var(--signal)",
-    "at_risk": "var(--at-risk)",
+    "pending": "var(--pending)",
     "blocked": "var(--blocked)",
     "in_review": "var(--in-review)",
     "done": "var(--on-track)",

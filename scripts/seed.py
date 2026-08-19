@@ -25,7 +25,7 @@ if not url or not service_key:
 
 supabase = create_client(url, service_key)
 
-STATUSES = ["backlog", "in_progress", "at_risk", "blocked", "in_review", "done"]
+STATUSES = ["backlog", "in_progress", "pending", "blocked", "in_review", "done"]
 PRIORITIES = ["low", "medium", "high", "urgent"]
 TITLES = [
     "Draft executive summary slide",

@@ -9,7 +9,7 @@
   --muted-faint: rgba(0,37,40,0.38);
   --hover-tint: rgba(0,37,40,0.06);
   --on-track: #3f9169;
-  --at-risk: #b9791f;
+  --pending: #b9791f;
   --blocked: #c23a3a;
   --in-review: #6f52b5;
   --done: #7a8391;
@@ -19,7 +19,7 @@
      sidebar dots, priority pills) where a tint would be too faint to read. */
   --tint-backlog: #e9ebee;
   --tint-in-progress: #d5e4e5;
-  --tint-at-risk: #f8e8cd;
+  --tint-pending: #f8e8cd;
   --tint-blocked: #f8dcdc;
   --tint-in-review: #e6dff5;
   --tint-done: #dcefe4;
@@ -271,7 +271,7 @@ html.sidebar-collapsed .subtab-strip { display: flex; }
 .date-block-count { font-size: 22px; font-weight: 700; }
 .date-block-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-faint); }
 .date-block-overdue .date-block-count { color: var(--blocked); }
-.date-block-week .date-block-count { color: var(--at-risk); }
+.date-block-week .date-block-count { color: var(--pending); }
 .date-block-upcoming .date-block-count { color: var(--signal); }
 
 .btn-primary {
@@ -374,7 +374,7 @@ body.dragging .task-card { pointer-events: none; }
    base --task-bg above stays as the fallback for any status not listed here. */
 .task-card.status-backlog { background: var(--tint-backlog); }
 .task-card.status-in_progress { background: var(--tint-in-progress); }
-.task-card.status-at_risk { background: var(--tint-at-risk); }
+.task-card.status-pending { background: var(--tint-pending); }
 .task-card.status-blocked { background: var(--tint-blocked); }
 .task-card.status-in_review { background: var(--tint-in-review); }
 .task-card.status-done { background: var(--tint-done); }
@@ -775,7 +775,7 @@ a.modal-menu-item { text-decoration: none; }
 .digest-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 .digest-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-faint); }
 .digest-refresh { flex-shrink: 0; }
-.digest-stale { font-size: 12px; color: var(--at-risk); margin: 8px 0 0; }
+.digest-stale { font-size: 12px; color: var(--pending); margin: 8px 0 0; }
 
 .my-day-section { margin-bottom: 22px; }
 .my-day-section .column-header { padding: 0 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
